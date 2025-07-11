@@ -1,0 +1,8 @@
+.vscode/
+minhook/
+oldstuff/
+timelogs/
+*.exp
+*.lib
+*.dll
+*.7z

@@ -1,5 +1,6 @@
 import sys
 import re
+import statistics
 
 def parse_loadingscreen_times(file_path):
     """
@@ -18,10 +19,12 @@ def parse_loadingscreen_times(file_path):
     count = len(times)
     if count == 0:
         return 0, 0.0, 0
+    
+    std_dev= statistics.stdev(times) if len(times)>1 else 0.0
 
     total = sum(times)
     average = total / count
-    return total, average, count
+    return total, average, count,std_dev
 
 def main():
     if len(sys.argv) != 2:
@@ -29,13 +32,14 @@ def main():
         sys.exit(1)
 
     logfile = sys.argv[1]
-    total_us, avg_us, count = parse_loadingscreen_times(logfile)
+    total_us, avg_us, std_us, count = parse_loadingscreen_times(logfile)
 
     total_ms = total_us / 1000
     avg_ms   = avg_us   / 1000
 
     print(f"Total time:   {total_us} μs ({total_ms:.2f} ms)")
     print(f"Average time: {avg_us:.2f} μs ({avg_ms:.2f} ms) over {count} samples")
+    print(f"Std deviation:   {std_us:.2f} μs ({std_us/1000:.2f} ms)")
 
 if __name__ == "__main__":
     main()

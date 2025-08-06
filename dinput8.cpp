@@ -24,12 +24,16 @@ void Log(const std::string& msg) {
 
 
 
-typedef void (__fastcall* LoadAndInitializePtr_t)(void* thisPtr, void* /*dummy*/, uint32_t param1, int param2);
+typedef void (__fastcall* LoadAndInitializePtr_t)(void* thisPtr, int param1, uint32_t param2, int param3);
 LoadAndInitializePtr_t g_originalLoadAndInitializePtr = nullptr;
 
-void __fastcall Hook_LoadAndInitializePtr(void* thisPtr, void* /*unused*/, uint32_t param1, int param2) {
-    
-    g_originalLoadAndInitializePtr(thisPtr, nullptr, param1, param2);
+void __fastcall Hook_LoadAndInitializePtr(void* thisPtr, int param1, uint32_t param2, int param3) {
+    // Timing seems to mess up this function
+    // auto start = std::chrono::high_resolution_clock::now();
+    g_originalLoadAndInitializePtr(thisPtr, param1, param2, param3);
+    // auto end = std::chrono::high_resolution_clock::now();
+    // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    // Log("LoadAndInitialize: " + std::to_string(duration.count()) + " μs");
     
 }
 
@@ -39,7 +43,6 @@ loadingscreenPtr_t g_originalLoadingScreenPtr = nullptr;
 
 
 int __fastcall Hook_loadingscreenPtr(int param1) {
-    static bool hasLoggedLoadAndInit = false;
     auto start = std::chrono::high_resolution_clock::now();
     
 
@@ -79,6 +82,37 @@ void __fastcall Hook_InitShadowCache(uint32_t param1){
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     Log("InitShadowCache: " + std::to_string(duration.count()) + " μs");
+}
+
+typedef uint32_t* (__thiscall* LoadResourceBlockOrFallbackPtr_t)(
+    void*       thisPtr,   // ECX – object / resource-manager
+    uint32_t*   param1,
+    int         param2,
+    int         param3,
+    uint32_t*   param4,
+    uint32_t*   param5
+);
+
+LoadResourceBlockOrFallbackPtr_t g_originalLoadResourceBlockOrFallbackPtr = nullptr;
+
+uint32_t* __fastcall Hook_LoadResourceBlockOrFallback(
+    void*       thisPtr,
+    void*       _edx,      // dummy for EDX – not used
+    uint32_t*   param1,
+    int         param2,
+    int         param3,
+    uint32_t*   param4,
+    uint32_t*   param5){
+    auto start = std::chrono::high_resolution_clock::now();
+
+
+    uint32_t* result = g_originalLoadResourceBlockOrFallbackPtr(thisPtr,param1,param2,param3,param4,param5);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("LoadResourceBlockOrFallback: " + std::to_string(duration.count()) + " μs");
+
+    return result;
 }
 
 
@@ -137,6 +171,18 @@ void InstallHook() {
         (LPVOID*)&g_originalInitShadowCachePtr) == MH_OK) {
             if (MH_EnableHook(targetAddr_InitShadowCache) == MH_OK) {
                 Log("InitShadowCache hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_LoadResourceBlockOrFallback = (void*)(0x718e40); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_LoadResourceBlockOrFallback, &Hook_LoadResourceBlockOrFallback, 
+        (LPVOID*)&g_originalLoadResourceBlockOrFallbackPtr) == MH_OK) {
+            if (MH_EnableHook(targetAddr_LoadResourceBlockOrFallback) == MH_OK) {
+                Log("LoadResourceBlockOrFallback hook installed successfully");
             } else {
                 Log("Failed to enable hook");
             }

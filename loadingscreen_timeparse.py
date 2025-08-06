@@ -2,12 +2,11 @@ import sys
 import re
 import statistics
 
-def parse_loadingscreen_times(file_path):
+def parse_loadingscreen_times(file_path,pattern):
     """
     Reads the file at `file_path`, finds all lines containing 'loadingscreen',
     extracts the time in microseconds, and returns (total_time_us, average_time_us, count).
     """
-    pattern = re.compile(r'loadingscreen:\s*(\d+)\s*μs')
     times = []
 
     with open(file_path, 'r', encoding='utf-8') as f:
@@ -32,14 +31,25 @@ def main():
         sys.exit(1)
 
     logfile = sys.argv[1]
-    total_us, avg_us, std_us, count = parse_loadingscreen_times(logfile)
 
-    total_ms = total_us / 1000
-    avg_ms   = avg_us   / 1000
+    patterns = [
+        ("loadingscreen", re.compile(r'loadingscreen:\s*(\d+)\s*μs')),
+        ("ProcessResourceQueue", re.compile(r'ProcessResourceQueue:\s*(\d+)\s*μs')),
+        ("InitShadowCache", re.compile(r'InitShadowCache:\s*(\d+)\s*μs'))
+    ]
 
-    print(f"Total time:   {total_us} μs ({total_ms:.2f} ms)")
-    print(f"Average time: {avg_us:.2f} μs ({avg_ms:.2f} ms) over {count} samples")
-    print(f"Std deviation:   {std_us:.2f} μs ({std_us/1000:.2f} ms)")
+    for name, p in patterns:
+        total_us, avg_us, count, std_us = parse_loadingscreen_times(logfile, p)
+
+        total_ms = total_us / 1000
+        avg_ms = avg_us / 1000
+        std_ms = std_us / 1000
+
+        print(f"=== {name} ===") 
+        print(f"Total time:   {total_us} μs ({total_ms:.2f} ms)")
+        print(f"Average time: {avg_us:.2f} μs ({avg_ms:.2f} ms) over {count} samples")
+        print(f"Std deviation: {std_us:.2f} μs ({std_ms:.2f} ms)")
+        print()
 
 if __name__ == "__main__":
     main()

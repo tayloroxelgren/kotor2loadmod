@@ -7,6 +7,8 @@ The mod is in early development, with only initial timing of the LoadingScreen f
 ## What has been identified so far?
 - `FUN_00533830` **LoadingScreen**: This appears to be the main function that initiates the loading screens in the game
 
+- `FUN_0051c470` **LoadingScreenWrapper**: Seems to just be a wrapper to call LoadingScreen
+
 - `FUN_005582f0` **LoadAndInitialize**: This function likely handles the loading and initialization of mod resources and game scenario data, including mod information, game parameters (time, player data), and setting up various in-game scripts.
 - `FUN_00407920` **GameMain**: Most likely the main function of the game
 - `FUN_00703f30` **ProcessResourceQueue**: Empties a 64 KB ring buffer of loading-time “packets,” handing each packet to the right handler (special handler if the packet starts with BN, otherwise the generic resource loader) until the queue is empty.
@@ -25,6 +27,8 @@ The mod is in early development, with only initial timing of the LoadingScreen f
 - `FUN_007178e0`
 - `FUN_007108a0`
 - `FUN_00717770`
+- `FUN_00717720`
+- `FUN_007186c0`
 
 ## Build Instructions
 Download [MinHook](https://github.com/TsudaKageyu/minhook)

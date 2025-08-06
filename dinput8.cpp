@@ -3,18 +3,15 @@
 #include <string>
 #include <chrono>
 #include "minhook/include/MinHook.h"
+#include <unordered_map>
+#include <mutex>
 
 // DirectInput8 proxy
 typedef HRESULT(WINAPI *DICREATE)(HINSTANCE, DWORD, REFIID, LPVOID*, LPUNKNOWN);
 static DICREATE realCreate = nullptr;
 
-// GetResourceDataPtr hook
-typedef int (__fastcall* loadingscreenPtr_t)(int param1);
-loadingscreenPtr_t g_originalGetResourceDataPtr = nullptr;
-
 // Simple logging
 std::ofstream g_logFile;
-
 void Log(const std::string& msg) {
     if (g_logFile.is_open()) {
         SYSTEMTIME st;
@@ -25,26 +22,67 @@ void Log(const std::string& msg) {
     }
 }
 
+
+
+typedef void (__fastcall* LoadAndInitializePtr_t)(void* thisPtr, void* /*dummy*/, uint32_t param1, int param2);
+LoadAndInitializePtr_t g_originalLoadAndInitializePtr = nullptr;
+
+void __fastcall Hook_LoadAndInitializePtr(void* thisPtr, void* /*unused*/, uint32_t param1, int param2) {
+    
+    g_originalLoadAndInitializePtr(thisPtr, nullptr, param1, param2);
+    
+}
+
+// LoadingScreen
+typedef int (__fastcall* loadingscreenPtr_t)(int param1);
+loadingscreenPtr_t g_originalLoadingScreenPtr = nullptr;
+
+
 int __fastcall Hook_loadingscreenPtr(int param1) {
+    static bool hasLoggedLoadAndInit = false;
     auto start = std::chrono::high_resolution_clock::now();
     
-    int result = g_originalGetResourceDataPtr(param1);
+
+    int result = g_originalLoadingScreenPtr(param1);
     
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     
     // Log with more detail
-    Log("loadingscreen: " + std::to_string(duration.count()) + " μs, result=0x" + 
-        std::to_string(result) + ", param1=" + std::to_string(param1));
+    Log("loadingscreen: " + std::to_string(duration.count()) + " μs");
     
     return result;
 }
 
 
+typedef void (__fastcall* ProcessResourceQueuePtr_t)(int param1, void*,int param2);
+ProcessResourceQueuePtr_t g_originalProcessResourceQueuePtr = nullptr;
+
+void __fastcall Hook_ProcessResourceQueue(int param1, void*,int param2){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalProcessResourceQueuePtr(param1,nullptr,param2);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("ProcessResourceQueue: " + std::to_string(duration.count()) + " μs");
+}
+
+typedef void (__fastcall* InitShadowCachePtr_t)(uint32_t param1);
+InitShadowCachePtr_t g_originalInitShadowCachePtr = nullptr;
+
+void __fastcall Hook_InitShadowCache(uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalInitShadowCachePtr(param1);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("InitShadowCache: " + std::to_string(duration.count()) + " μs");
+}
 
 
 void InstallHook() {
-    Log("Installing GetResourceDataPtr hook...");
     
     if (MH_Initialize() != MH_OK) {
         Log("MinHook init failed");
@@ -53,18 +91,62 @@ void InstallHook() {
     
     HMODULE hModule = GetModuleHandle(nullptr);
     DWORD baseAddr = (DWORD)hModule;
-    void* targetAddr = (void*)(0x533830); //Just putting in actual address
     
+    
+    void* targetAddr = (void*)(0x533830); //Just putting in actual address
     if (MH_CreateHook(targetAddr, &Hook_loadingscreenPtr, 
-                     (LPVOID*)&g_originalGetResourceDataPtr) == MH_OK) {
-        if (MH_EnableHook(targetAddr) == MH_OK) {
-            Log("GetResourceDataPtr hook installed successfully");
+        (LPVOID*)&g_originalLoadingScreenPtr) == MH_OK) {
+            if (MH_EnableHook(targetAddr) == MH_OK) {
+                Log("LoadScreen hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
         } else {
-            Log("Failed to enable hook");
+            Log("Failed to create hook");
         }
-    } else {
-        Log("Failed to create hook");
-    }
+
+
+        
+    void* targetAddr_LoadAndInitialize = (void*)(0x5582f0); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_LoadAndInitialize, &Hook_LoadAndInitializePtr, 
+        (LPVOID*)&g_originalLoadAndInitializePtr) == MH_OK) {
+            if (MH_EnableHook(targetAddr_LoadAndInitialize) == MH_OK) {
+                Log("LoadAndInitialize hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_ProcessResourceQueue = (void*)(0x703f30); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_ProcessResourceQueue, &Hook_ProcessResourceQueue, 
+        (LPVOID*)&g_originalProcessResourceQueuePtr) == MH_OK) {
+            if (MH_EnableHook(targetAddr_ProcessResourceQueue) == MH_OK) {
+                Log("ProcessResourceQueue hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+
+    void* targetAddr_InitShadowCache = (void*)(0x53a8b0); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_InitShadowCache, &Hook_InitShadowCache, 
+        (LPVOID*)&g_originalInitShadowCachePtr) == MH_OK) {
+            if (MH_EnableHook(targetAddr_InitShadowCache) == MH_OK) {
+                Log("InitShadowCache hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+        
+        
+
+
 }
 
 HRESULT WINAPI DirectInput8Create(
@@ -79,7 +161,6 @@ HRESULT WINAPI DirectInput8Create(
         realCreate = (DICREATE)GetProcAddress(realDLL, "DirectInput8Create");
         if (!realCreate) return E_FAIL;
         
-        Log("DirectInput8Create proxy loaded");
     }
 
     return realCreate(hinst, dwVersion, riid, ppvOut, punkOuter);

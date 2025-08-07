@@ -95,6 +95,7 @@ inline uint64_t Hash64(const void* p, uint32_t len) {
 //     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 //     Log("ProcessResourceQueue: " + std::to_string(duration.count()) + " μs");
 // }
+
 void __fastcall Hook_ProcessResourceQueue(int param1, void*, int param2){
     auto start = std::chrono::high_resolution_clock::now();
 
@@ -184,6 +185,14 @@ uint32_t* __fastcall Hook_LoadResourceBlockOrFallback(
 }
 
 
+typedef void (__fastcall* PreloadInitialAssetsWrapperPtr_t)(uint32_t param1);
+PreloadInitialAssetsWrapperPtr_t g_originalPreloadInitialAssetsWrapperPtr=nullptr;
+
+void __fastcall Hook_PreloadInitialAssetsWrapper(uint32_t param1){
+    g_originalPreloadInitialAssetsWrapperPtr(param1);
+}
+
+
 void InstallHook() {
     
     if (MH_Initialize() != MH_OK) {
@@ -263,6 +272,19 @@ void InstallHook() {
         (LPVOID*)&g_originalLoadResourceBlockOrFallbackPtr) == MH_OK) {
             if (MH_EnableHook(targetAddr_LoadResourceBlockOrFallback) == MH_OK) {
                 Log("LoadResourceBlockOrFallback hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+
+    void* targetAddr_PreloadInitialAssetsWrapper = (void*)(0x73f050); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_PreloadInitialAssetsWrapper, &Hook_PreloadInitialAssetsWrapper, 
+        (LPVOID*)&g_originalPreloadInitialAssetsWrapperPtr) == MH_OK) {
+            if (MH_EnableHook(targetAddr_PreloadInitialAssetsWrapper) == MH_OK) {
+                Log("PreloadInitialAssetsWrapper hook installed successfully");
             } else {
                 Log("Failed to enable hook");
             }

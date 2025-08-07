@@ -58,6 +58,20 @@ int __fastcall Hook_loadingscreenPtr(int param1) {
     return result;
 }
 
+typedef uint32_t (__fastcall* HandleBNPacketPtr_t)(int thisPtr,int edxdummy,uint32_t param1,char* packet,uint32_t length);
+HandleBNPacketPtr_t g_originalHandleBNPacketPtr = nullptr;
+
+uint32_t __fastcall Hook_HandleBNPacket(int thisPtr,int edxdummy,uint32_t param1,char* packet,uint32_t length){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t result=g_originalHandleBNPacketPtr(thisPtr,edxdummy,param1,packet,length);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("HandleBNPacket: " + std::to_string(duration.count()) + " μs");
+
+    return result;
+}
 
 typedef void (__fastcall* ProcessResourceQueuePtr_t)(int param1, void*,int param2);
 ProcessResourceQueuePtr_t g_originalProcessResourceQueuePtr = nullptr;
@@ -73,29 +87,57 @@ inline uint64_t Hash64(const void* p, uint32_t len) {
     return h ^ len;
 }
 
-void __fastcall Hook_ProcessResourceQueue(int param1, void*,int param2){
+// void __fastcall Hook_ProcessResourceQueue(int param1, void*,int param2){
+//     auto start = std::chrono::high_resolution_clock::now();
+//     g_originalProcessResourceQueuePtr(param1,nullptr,param2);
+
+//     auto end = std::chrono::high_resolution_clock::now();
+//     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+//     Log("ProcessResourceQueue: " + std::to_string(duration.count()) + " μs");
+// }
+void __fastcall Hook_ProcessResourceQueue(int param1, void*, int param2){
     auto start = std::chrono::high_resolution_clock::now();
-    g_originalProcessResourceQueuePtr(param1,nullptr,param2);
+
+    if(param2 != 0){
+        uint32_t* readPosPtr  = (uint32_t*)(param1 + 0x20000);
+        uint32_t* writePosPtr = (uint32_t*)(param1 + 0x20004);
+        char* base = (char*)param1;
+        uint32_t readPos  = *readPosPtr;
+        uint32_t writePos = *writePosPtr;
+
+        while(readPos != writePos){
+            if(readPos > 0xFFFF){
+                readPos = 0;
+            }
+            
+            uint32_t packetLen = *(uint32_t*)(base + readPos);
+            readPos += 4;
+
+            char* packet = base + readPos;
+            if (*(uint16_t*)packet == 0x4E42){  // "BN"
+                g_originalHandleBNPacketPtr(param1, 0, 0, packet, packetLen);
+            }
+            else{
+                void* object = *(void**)(param1 + 0x20008);
+                void** vtable = *(void***)object;
+                typedef void (__fastcall* VTableFunc)(void* thisPtr, void* edx, int p1, char* p2, uint32_t p3, int p4);
+                VTableFunc func = (VTableFunc)vtable[1];
+                func(object, 0, 0, packet, packetLen, 0);
+            }
+            
+            readPos += packetLen;
+            readPos += (4 - (packetLen & 3)) & 3;  // Alignment
+            
+            writePos = *writePosPtr;
+        }
+        *readPosPtr = readPos;
+    }
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     Log("ProcessResourceQueue: " + std::to_string(duration.count()) + " μs");
 }
 
-typedef uint32_t (__fastcall* HandleBNPacketPtr_t)(int thisPtr,int edxdummy,uint32_t param1,char* packet,uint32_t length);
-HandleBNPacketPtr_t g_originalHandleBNPacketPtr = nullptr;
-
-uint32_t __fastcall Hook_HandleBNPacket(int thisPtr,int edxdummy,uint32_t param1,char* packet,uint32_t length){
-    auto start = std::chrono::high_resolution_clock::now();
-
-    uint32_t result=g_originalHandleBNPacketPtr(thisPtr,edxdummy,param1,packet,length);
-
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    Log("HandleBNPacket: " + std::to_string(duration.count()) + " μs");
-
-    return result;
-}
 
 typedef void (__fastcall* InitShadowCachePtr_t)(uint32_t param1);
 InitShadowCachePtr_t g_originalInitShadowCachePtr = nullptr;

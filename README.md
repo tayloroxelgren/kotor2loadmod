@@ -8,9 +8,10 @@ The mod is in early development, with only initial timing of the LoadingScreen f
 - `FUN_00533830` **LoadingScreen**: This appears to be the main function that initiates the loading screens in the game
 
 - `FUN_0051c470` **LoadingScreenWrapper**: Seems to just be a wrapper to call LoadingScreen
-
+- `FUN_00409ed0` **LoadingScreenUpdateFrame**: Draws and presents one loading-screen frame, then advances asset streaming by ticking the resource queue.
 - `FUN_005582f0` **LoadAndInitialize**: This function likely handles the loading and initialization of mod resources and game scenario data, including mod information, game parameters (time, player data), and setting up various in-game scripts.
 - `FUN_00407920` **GameMain**: Most likely the main function of the game
+- `FUN_00781be0` **Engine**: Seems to have the main engine logic
 - `FUN_00703f30` **ProcessResourceQueue**: Empties a 64 KB ring buffer of loading-time “packets,” handing each packet to the right handler (special handler if the packet starts with BN, otherwise the generic resource loader) until the queue is empty.
 - `FUN_00718e40` **LoadResourceBlockOrFallback**: Tries to load a resource block by type & ID; if it’s missing, invalid, or too small, it copies a default 4-word fallback instead and clears the “found” flag; only when valid data exists does it set the flag and process the payload.
 - `FUN_00717820` **GetResourceDataPtr**: Checks that the resource manager and entry are valid and in bounds; if so, returns a pointer to the entry’s data block and writes its byte-length into the out parameter, otherwise returns 0.

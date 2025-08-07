@@ -18,7 +18,7 @@ if %ERRORLEVEL% neq 0 (
 
 REM Compile the proxy DLL in 32-bit
 echo Building dinput8.dll (32-bit)...
-cl /LD /MD /DWIN32 /EHsc dinput8.cpp ^
+cl /LD /O2 /MD /DWIN32 /EHsc dinput8.cpp ^
     buffer.obj hook.obj trampoline.obj hde32.obj hde64.obj ^
     /I"minhook\include" ^
     /link /MACHINE:X86 /DEF:dinput8.def /OUT:dinput8.dll

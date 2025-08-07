@@ -5,6 +5,7 @@
 #include "minhook/include/MinHook.h"
 #include <unordered_map>
 #include <mutex>
+#include <unordered_set>
 
 // DirectInput8 proxy
 typedef HRESULT(WINAPI *DICREATE)(HINSTANCE, DWORD, REFIID, LPVOID*, LPUNKNOWN);
@@ -61,14 +62,39 @@ int __fastcall Hook_loadingscreenPtr(int param1) {
 typedef void (__fastcall* ProcessResourceQueuePtr_t)(int param1, void*,int param2);
 ProcessResourceQueuePtr_t g_originalProcessResourceQueuePtr = nullptr;
 
+
+static std::unordered_set<uint64_t> g_seenHashes;
+
+inline uint64_t Hash64(const void* p, uint32_t len) {
+    uint64_t h = 0xcbf29ce484222325ULL;
+    const uint8_t* c = static_cast<const uint8_t*>(p);
+    for (uint32_t i = 0; i < len; ++i)
+        h = (h ^ c[i]) * 0x100000001b3ULL;
+    return h ^ len;
+}
+
 void __fastcall Hook_ProcessResourceQueue(int param1, void*,int param2){
     auto start = std::chrono::high_resolution_clock::now();
-
     g_originalProcessResourceQueuePtr(param1,nullptr,param2);
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     Log("ProcessResourceQueue: " + std::to_string(duration.count()) + " μs");
+}
+
+typedef uint32_t (__fastcall* HandleBNPacketPtr_t)(int thisPtr,int edxdummy,uint32_t param1,char* packet,uint32_t length);
+HandleBNPacketPtr_t g_originalHandleBNPacketPtr = nullptr;
+
+uint32_t __fastcall Hook_HandleBNPacket(int thisPtr,int edxdummy,uint32_t param1,char* packet,uint32_t length){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t result=g_originalHandleBNPacketPtr(thisPtr,edxdummy,param1,packet,length);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("HandleBNPacket: " + std::to_string(duration.count()) + " μs");
+
+    return result;
 }
 
 typedef void (__fastcall* InitShadowCachePtr_t)(uint32_t param1);
@@ -158,6 +184,18 @@ void InstallHook() {
         (LPVOID*)&g_originalProcessResourceQueuePtr) == MH_OK) {
             if (MH_EnableHook(targetAddr_ProcessResourceQueue) == MH_OK) {
                 Log("ProcessResourceQueue hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_HandleBNPacket = (void*)(0x704880); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_HandleBNPacket, &Hook_HandleBNPacket, 
+        (LPVOID*)&g_originalHandleBNPacketPtr) == MH_OK) {
+            if (MH_EnableHook(targetAddr_HandleBNPacket) == MH_OK) {
+                Log("HandleBNPacket hook installed successfully");
             } else {
                 Log("Failed to enable hook");
             }

@@ -36,7 +36,8 @@ def main():
         ("loadingscreen", re.compile(r'loadingscreen:\s*(\d+)\s*μs')),
         ("ProcessResourceQueue", re.compile(r'ProcessResourceQueue:\s*(\d+)\s*μs')),
         ("InitShadowCache", re.compile(r'InitShadowCache:\s*(\d+)\s*μs')),
-        ("LoadResourceBlockOrFallback", re.compile(r'LoadResourceBlockOrFallback:\s*(\d+)\s*μs'))
+        ("LoadResourceBlockOrFallback", re.compile(r'LoadResourceBlockOrFallback:\s*(\d+)\s*μs')),
+        ("HandleBNPacket", re.compile(r'HandleBNPacket:\s*(\d+)\s*μs'))
     ]
 
     for name, p in patterns:

@@ -2,7 +2,10 @@
 This mod aims to improve the load times for the steam version of Kotor 2
 
 ## Status
-The mod is in early development, with only initial timing of the LoadingScreen function set up. Currently still exploring and investigating functions in the game.
+The mod is in early development, but currently enables the inital splash screens to be skipped on boot of the game. Other functions and improvements are still being explored.
+
+## Installation
+Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 
 ## What has been identified so far?
 - `FUN_00533830` **LoadingScreen**: This appears to be the main function that initiates the loading screens in the game
@@ -29,12 +32,6 @@ The mod is in early development, with only initial timing of the LoadingScreen f
 - `FUN_0073f230` **PreloadAssetsWrapper**: Wrapper to preload assets
 - `FUN_00781590` **PreloadAssets**: Loads assets
 
-## Currently Identifying:
-- `FUN_007178e0`
-- `FUN_007108a0`
-- `FUN_00717770`
-- `FUN_00717720`
-- `FUN_007186c0`
 
 ## Build Instructions
 Download [MinHook](https://github.com/TsudaKageyu/minhook)
@@ -42,3 +39,9 @@ Download [MinHook](https://github.com/TsudaKageyu/minhook)
 Place it in the repository directory and include both the src and lib then run
 
 `build.bat`
+
+---
+Note:
+
+- Only works for steam version on Windows
+- Testing is still minimal as development is early so use at your own risk

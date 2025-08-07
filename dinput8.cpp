@@ -189,7 +189,7 @@ typedef void (__fastcall* PreloadInitialAssetsWrapperPtr_t)(uint32_t param1);
 PreloadInitialAssetsWrapperPtr_t g_originalPreloadInitialAssetsWrapperPtr=nullptr;
 
 void __fastcall Hook_PreloadInitialAssetsWrapper(uint32_t param1){
-    g_originalPreloadInitialAssetsWrapperPtr(param1);
+    return;
 }
 
 
@@ -322,7 +322,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
             
             // Install hook after delay
             CreateThread(nullptr, 0, [](LPVOID) -> DWORD {
-                Sleep(1000);//oringal 3000
+                Sleep(10);//oringal 3000
                 InstallHook();
                 return 0;
             }, nullptr, 0, nullptr);

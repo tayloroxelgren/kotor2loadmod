@@ -24,6 +24,10 @@ The mod is in early development, with only initial timing of the LoadingScreen f
 - `FUN_0052f610` **SaveGame**: Creates save game file
 - `FUN_007DE110` **CaptureScreenThumb**: Grabs current frame buffer, measures its brightness (skips totally dark frames), scales it to thumbnail size, and calls into the renderer to write out the 4-component pixel data
 - `FUN_00704880` **HandleBNPacket**: Checks a “BN…” packet to see if it’s a BN-CS (decompress or verify data) or BN-CR (compile or initialize data) message—if so, calls the right specialized handler; otherwise it hands the packet off to the generic loader with a flag marking it as a BN packet.
+- `FUN_0073f050` **PreloadInitialAssetsWrapper**: Wrapper to preload inital assets like the splash screen
+- `FUN_007813a0` **PreloadInitialAssets**: Preloads inital assets like the splash screen
+- `FUN_0073f230` **PreloadAssetsWrapper**: Wrapper to preload assets
+- `FUN_00781590` **PreloadAssets**: Loads assets
 
 ## Currently Identifying:
 - `FUN_007178e0`

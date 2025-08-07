@@ -41,17 +41,20 @@ def main():
     ]
 
     for name, p in patterns:
-        total_us, avg_us, count, std_us = parse_loadingscreen_times(logfile, p)
+        try:
+            total_us, avg_us, count, std_us = parse_loadingscreen_times(logfile, p)
 
-        total_ms = total_us / 1000
-        avg_ms = avg_us / 1000
-        std_ms = std_us / 1000
+            total_ms = total_us / 1000
+            avg_ms = avg_us / 1000
+            std_ms = std_us / 1000
 
-        print(f"=== {name} ===") 
-        print(f"Total time:   {total_us} μs ({total_ms:.2f} ms)")
-        print(f"Average time: {avg_us:.2f} μs ({avg_ms:.2f} ms) over {count} samples")
-        print(f"Std deviation: {std_us:.2f} μs ({std_ms:.2f} ms)")
-        print()
+            print(f"=== {name} ===") 
+            print(f"Total time:   {total_us} μs ({total_ms:.2f} ms)")
+            print(f"Average time: {avg_us:.2f} μs ({avg_ms:.2f} ms) over {count} samples")
+            print(f"Std deviation: {std_us:.2f} μs ({std_ms:.2f} ms)")
+            print()
+        except:
+            print(f"Function data not found for: {name}")
 
 if __name__ == "__main__":
     main()

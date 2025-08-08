@@ -293,6 +293,20 @@ uint32_t __cdecl Hook_GameObjUpdate(byte param1){
 }
 
 
+typedef uint32_t (__cdecl* ModuleChunkLoadCorePtr_t)(int param1);
+ModuleChunkLoadCorePtr_t g_originalModuleChunkLoadCore=nullptr;
+
+uint32_t __cdecl Hook_ModuleChunkLoadCore(int param1){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalModuleChunkLoadCore(param1);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("ModuleChunkLoadCore: " + std::to_string(duration.count()) + " μs");
+}
+
+
 void InstallHook() {
     
     if (MH_Initialize() != MH_OK) {
@@ -473,6 +487,18 @@ void InstallHook() {
         (LPVOID*)&g_originalGameObjUpdate) == MH_OK) {
             if (MH_EnableHook(targetAddr_GameObjUpdate) == MH_OK) {
                 Log("GameObjUpdate hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_ModuleChunkLoadCore = (void*)(0x7BE4C0); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_ModuleChunkLoadCore, &Hook_ModuleChunkLoadCore, 
+        (LPVOID*)&g_originalModuleChunkLoadCore) == MH_OK) {
+            if (MH_EnableHook(targetAddr_ModuleChunkLoadCore) == MH_OK) {
+                Log("ModuleChunkLoadCore hook installed successfully");
             } else {
                 Log("Failed to enable hook");
             }

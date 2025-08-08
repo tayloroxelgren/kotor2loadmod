@@ -28,6 +28,9 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_00733540` **ResetTracer**: Takes a two-word slot and zeroes both values—basically “start a fresh trace section” by clearing its ID and counter.
 - `FUN_00733780` **FlushTracer**": If the trace section has a nonzero ID, it clears the counter
 - `FUN_009196fd` **FreeTracer**: Frees the tracer memory
+- `FUN_0073F2D0` **Trace_InitContext**: Grabs a per-thread “tracer” slot so the loader knows where to send its log lines.
+- `FUN_00734270` **Trace_FormatMessage**: Builds a log message by running a printf-style format into a resizable temp buffer and copying it to a new heap string.
+- `FUN_00739AA0` **Trace_WriteMessage**: Takes the formatted string and writes it out (via fwrite) to the tracer’s output file.
 - `FUN_0052f610` **SaveGame**: Creates save game file
 - `FUN_007DE110` **CaptureScreenThumb**: Grabs current frame buffer, measures its brightness (skips totally dark frames), scales it to thumbnail size, and calls into the renderer to write out the 4-component pixel data
 - `FUN_00704880` **HandleBNPacket**: Checks a “BN…” packet to see if it’s a BN-CS (decompress or verify data) or BN-CR (compile or initialize data) message—if so, calls the right specialized handler; otherwise it hands the packet off to the generic loader with a flag marking it as a BN packet.

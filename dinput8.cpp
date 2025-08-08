@@ -266,6 +266,18 @@ uint32_t __cdecl Hook_SpacketHandler(char *param1,int param2){
     Log("SpacketHandler: " + std::to_string(duration.count()) + " μs");
 }
 
+typedef uint32_t (__cdecl* ModuleHandlerPtr_t)(byte param1);
+ModuleHandlerPtr_t g_originalModuleHandler=nullptr;
+
+uint32_t __cdecl Hook_ModuleHandler(byte param1){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalModuleHandler(param1);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("ModuleHandler: " + std::to_string(duration.count()) + " μs");
+}
 
 
 void InstallHook() {
@@ -422,6 +434,19 @@ void InstallHook() {
     if (MH_CreateHook(targetAddr_SpacketHandler, &Hook_SpacketHandler, 
         (LPVOID*)&g_originalSpacketHandler) == MH_OK) {
             if (MH_EnableHook(targetAddr_SpacketHandler) == MH_OK) {
+                Log("PpacketHandler hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+
+    void* targetAddr_ModuleHandler = (void*)(0x811450); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_ModuleHandler, &Hook_ModuleHandler, 
+        (LPVOID*)&g_originalModuleHandler) == MH_OK) {
+            if (MH_EnableHook(targetAddr_ModuleHandler) == MH_OK) {
                 Log("PpacketHandler hook installed successfully");
             } else {
                 Log("Failed to enable hook");

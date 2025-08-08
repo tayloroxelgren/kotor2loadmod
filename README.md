@@ -38,6 +38,8 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_007813a0` **PreloadInitialAssets**: Preloads inital assets like the splash screen
 - `FUN_0073f230` **PreloadAssetsWrapper**: Wrapper to preload assets
 - `FUN_00781590` **PreloadAssets**: Loads assets
+- `FUN_00811450` **ModuleHandler**: Loads and initializes each game module, bringing in level data, assets, and scripts needed for the world.
+- `FUN_0080deb0` **GameObjUpdate**: Processes incoming object-update packets, creating or refreshing in-game entities and syncing their state during the loading phase.
 
 
 ## Build Instructions

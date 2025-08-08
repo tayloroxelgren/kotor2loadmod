@@ -40,6 +40,9 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_00781590` **PreloadAssets**: Loads assets
 - `FUN_00811450` **ModuleHandler**: Loads and initializes each game module, bringing in level data, assets, and scripts needed for the world.
 - `FUN_0080deb0` **GameObjUpdate**: Processes incoming object-update packets, creating or refreshing in-game entities and syncing their state during the loading phase.
+- `FUN_007BE4C0` **ModuleChunkLoadCore**: Wrapper Allocates and parses a module’s sub-chunks, updates the loading screen between groups, and marks the chunk as done.
+- `FUN_0073F870` **ModuleChunkLoadWrapperA**: Wrapper for ModuleChunkLoadCore
+- `FUN_0078C330` **ModuleChunkLoadWrapperB**: Wrapper for ModuleChunkLoadCore
 
 
 ## Build Instructions

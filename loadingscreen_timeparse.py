@@ -46,6 +46,7 @@ def main():
         ("SpacketHandler", re.compile(r'SpacketHandler:\s*(\d+)\s*μs')),
         ("ModuleHandler", re.compile(r'ModuleHandler:\s*(\d+)\s*μs')),
         ("ModuleChunkLoadCore", re.compile(r'ModuleChunkLoadCore:\s*(\d+)\s*μs')),
+        ("LoadingScreenUpdateFrame", re.compile(r'LoadingScreenUpdateFrame:\s*(\d+)\s*μs')),
         ("GameObjUpdate", re.compile(r'GameObjUpdate:\s*(\d+)\s*μs'))
     ]
 

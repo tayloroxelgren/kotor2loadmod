@@ -307,6 +307,20 @@ uint32_t __cdecl Hook_ModuleChunkLoadCore(int param1){
 }
 
 
+typedef void (__cdecl* LoadingScreenUpdateFramePtr_t)(uint32_t param1,int param2,int param3);
+LoadingScreenUpdateFramePtr_t g_originalLoadingScreenUpdateFrame=nullptr;
+
+void __cdecl Hook_LoadingScreenUpdateFrame(uint32_t param1,int param2,int param3){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalLoadingScreenUpdateFrame(param1,param2,param3);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("LoadingScreenUpdateFrame: " + std::to_string(duration.count()) + " μs");
+}
+
+
 void InstallHook() {
     
     if (MH_Initialize() != MH_OK) {
@@ -499,6 +513,18 @@ void InstallHook() {
         (LPVOID*)&g_originalModuleChunkLoadCore) == MH_OK) {
             if (MH_EnableHook(targetAddr_ModuleChunkLoadCore) == MH_OK) {
                 Log("ModuleChunkLoadCore hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_LoadingScreenUpdateFrame = (void*)(0x409ed0); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_LoadingScreenUpdateFrame, &Hook_LoadingScreenUpdateFrame, 
+        (LPVOID*)&g_originalLoadingScreenUpdateFrame) == MH_OK) {
+            if (MH_EnableHook(targetAddr_LoadingScreenUpdateFrame) == MH_OK) {
+                Log("LoadingScreenUpdateFrame hook installed successfully");
             } else {
                 Log("Failed to enable hook");
             }

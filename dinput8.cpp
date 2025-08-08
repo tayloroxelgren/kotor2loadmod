@@ -279,6 +279,19 @@ uint32_t __cdecl Hook_ModuleHandler(byte param1){
     Log("ModuleHandler: " + std::to_string(duration.count()) + " μs");
 }
 
+typedef uint32_t (__cdecl* GameObjUpdatePtr_t)(byte param1);
+GameObjUpdatePtr_t g_originalGameObjUpdate=nullptr;
+
+uint32_t __cdecl Hook_GameObjUpdate(byte param1){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalGameObjUpdate(param1);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("GameObjUpdate: " + std::to_string(duration.count()) + " μs");
+}
+
 
 void InstallHook() {
     
@@ -447,7 +460,19 @@ void InstallHook() {
     if (MH_CreateHook(targetAddr_ModuleHandler, &Hook_ModuleHandler, 
         (LPVOID*)&g_originalModuleHandler) == MH_OK) {
             if (MH_EnableHook(targetAddr_ModuleHandler) == MH_OK) {
-                Log("PpacketHandler hook installed successfully");
+                Log("ModuleHandler hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_GameObjUpdate = (void*)(0x80deb0); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_GameObjUpdate, &Hook_GameObjUpdate, 
+        (LPVOID*)&g_originalGameObjUpdate) == MH_OK) {
+            if (MH_EnableHook(targetAddr_GameObjUpdate) == MH_OK) {
+                Log("GameObjUpdate hook installed successfully");
             } else {
                 Log("Failed to enable hook");
             }

@@ -44,7 +44,8 @@ def main():
         ("ResourceQueue_UnpackAndTrace", re.compile(r'ResourceQueue_UnpackAndTrace:\s*(\d+)\s*μs')),
         ("PpacketHandler", re.compile(r'PpacketHandler:\s*(\d+)\s*μs')),
         ("SpacketHandler", re.compile(r'SpacketHandler:\s*(\d+)\s*μs')),
-        ("ModuleHandler", re.compile(r'ModuleHandler:\s*(\d+)\s*μs'))
+        ("ModuleHandler", re.compile(r'ModuleHandler:\s*(\d+)\s*μs')),
+        ("GameObjUpdate", re.compile(r'GameObjUpdate:\s*(\d+)\s*μs'))
     ]
 
     for name, p in patterns:

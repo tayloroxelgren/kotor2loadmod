@@ -43,6 +43,7 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_007BE4C0` **ModuleChunkLoadCore**: Wrapper Allocates and parses a module’s sub-chunks, updates the loading screen between groups, and marks the chunk as done.
 - `FUN_0073F870` **ModuleChunkLoadWrapperA**: Wrapper for ModuleChunkLoadCore
 - `FUN_0078C330` **ModuleChunkLoadWrapperB**: Wrapper for ModuleChunkLoadCore
+- `FUN_00747210` **InitializeGameUI**: Constructs and configures the entire in-game user interface
 
 
 ## Build Instructions

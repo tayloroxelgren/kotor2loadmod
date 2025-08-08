@@ -24,7 +24,6 @@ void Log(const std::string& msg) {
 }
 
 
-
 typedef void (__fastcall* LoadAndInitializePtr_t)(void* thisPtr, int param1, uint32_t param2, int param3);
 LoadAndInitializePtr_t g_originalLoadAndInitializePtr = nullptr;
 
@@ -240,6 +239,22 @@ void __fastcall Hook_FlushTracer(int *param1){
 }
 
 
+
+typedef uint32_t (__cdecl* PpacketHandlerPtr_t)(char *param1,int param2);
+PpacketHandlerPtr_t g_originalPpacketHandler= nullptr;
+
+uint32_t __cdecl Hook_PpacketHandler(char *param1,int param2){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalPpacketHandler(param1,param2);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("PpacketHandler: " + std::to_string(duration.count()) + " μs");
+}
+
+
+
 void InstallHook() {
     
     if (MH_Initialize() != MH_OK) {
@@ -375,8 +390,20 @@ void InstallHook() {
         } else {
             Log("Failed to create hook");
         }
-        
-        
+
+
+    void* targetAddr_PpacketHandler = (void*)(0x810cf0); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_PpacketHandler, &Hook_PpacketHandler, 
+        (LPVOID*)&g_originalPpacketHandler) == MH_OK) {
+            if (MH_EnableHook(targetAddr_PpacketHandler) == MH_OK) {
+                Log("PpacketHandler hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
 
 
 }

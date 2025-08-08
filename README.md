@@ -44,6 +44,7 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_0073F870` **ModuleChunkLoadWrapperA**: Wrapper for ModuleChunkLoadCore
 - `FUN_0078C330` **ModuleChunkLoadWrapperB**: Wrapper for ModuleChunkLoadCore
 - `FUN_00747210` **InitializeGameUI**: Constructs and configures the entire in-game user interface
+- `FUN_00919723` **AllocateMemoryOrThrow**: General memory allocator
 
 
 ## Build Instructions

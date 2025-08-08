@@ -73,71 +73,104 @@ uint32_t __fastcall Hook_HandleBNPacket(int thisPtr,int edxdummy,uint32_t param1
     return result;
 }
 
+
+typedef uint32_t (__stdcall* ResourcePacketDispatcherPtr_t)(uint32_t param1,char *param2,uint32_t param3,int param4);
+ResourcePacketDispatcherPtr_t g_originalResourcePacketPtr=nullptr;
+
+uint32_t __stdcall Hook_ResourcePacketDispatcher(uint32_t param1,char *param2,uint32_t param3,int param4){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t result=g_originalResourcePacketPtr(param1,param2,param3,param4);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("ResourcePacketDispatcher: " + std::to_string(duration.count()) + " μs");
+
+    return result;
+}
+
+typedef uint32_t (__fastcall *ResourceQueue_UnpackAndTracePtr_t)(void* thisPtr, void* edxdummy, uint32_t param1, char* param2, uint32_t param3, int param4);
+ResourceQueue_UnpackAndTracePtr_t g_originalResourceQueue_UnpackAndTracePtr=nullptr;
+
+uint32_t __fastcall Hook_ResourceQueue_UnpackAndTrace(void* thisPtr, void* edxdummy, uint32_t param1, char* param2, uint32_t param3, int param4){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t result=g_originalResourceQueue_UnpackAndTracePtr(thisPtr,edxdummy,param1,param2,param3,param4);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("ResourceQueue_UnpackAndTrace: " + std::to_string(duration.count()) + " μs");
+
+    return result;
+}
+
+
+
 typedef void (__fastcall* ProcessResourceQueuePtr_t)(int param1, void*,int param2);
 ProcessResourceQueuePtr_t g_originalProcessResourceQueuePtr = nullptr;
 
 
-static std::unordered_set<uint64_t> g_seenHashes;
-
-inline uint64_t Hash64(const void* p, uint32_t len) {
-    uint64_t h = 0xcbf29ce484222325ULL;
-    const uint8_t* c = static_cast<const uint8_t*>(p);
-    for (uint32_t i = 0; i < len; ++i)
-        h = (h ^ c[i]) * 0x100000001b3ULL;
-    return h ^ len;
-}
-
-// void __fastcall Hook_ProcessResourceQueue(int param1, void*,int param2){
-//     auto start = std::chrono::high_resolution_clock::now();
-//     g_originalProcessResourceQueuePtr(param1,nullptr,param2);
-
-//     auto end = std::chrono::high_resolution_clock::now();
-//     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-//     Log("ProcessResourceQueue: " + std::to_string(duration.count()) + " μs");
-// }
-
-void __fastcall Hook_ProcessResourceQueue(int param1, void*, int param2){
+void __fastcall Hook_ProcessResourceQueue(int param1, void*,int param2){
     auto start = std::chrono::high_resolution_clock::now();
-
-    if(param2 != 0){
-        uint32_t* readPosPtr  = (uint32_t*)(param1 + 0x20000);
-        uint32_t* writePosPtr = (uint32_t*)(param1 + 0x20004);
-        char* base = (char*)param1;
-        uint32_t readPos  = *readPosPtr;
-        uint32_t writePos = *writePosPtr;
-
-        while(readPos != writePos){
-            if(readPos > 0xFFFF){
-                readPos = 0;
-            }
-            
-            uint32_t packetLen = *(uint32_t*)(base + readPos);
-            readPos += 4;
-
-            char* packet = base + readPos;
-            if (*(uint16_t*)packet == 0x4E42){  // "BN"
-                g_originalHandleBNPacketPtr(param1, 0, 0, packet, packetLen);
-            }
-            else{
-                void* object = *(void**)(param1 + 0x20008);
-                void** vtable = *(void***)object;
-                typedef void (__fastcall* VTableFunc)(void* thisPtr, void* edx, int p1, char* p2, uint32_t p3, int p4);
-                VTableFunc func = (VTableFunc)vtable[1];
-                func(object, 0, 0, packet, packetLen, 0);
-            }
-            
-            readPos += packetLen;
-            readPos += (4 - (packetLen & 3)) & 3;  // Alignment
-            
-            writePos = *writePosPtr;
-        }
-        *readPosPtr = readPos;
-    }
+    g_originalProcessResourceQueuePtr(param1,nullptr,param2);
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     Log("ProcessResourceQueue: " + std::to_string(duration.count()) + " μs");
 }
+
+// void __fastcall Hook_ProcessResourceQueue(int param1, void*, int param2){
+//     auto start = std::chrono::high_resolution_clock::now();
+
+//     if(param2 != 0){
+//         uint32_t* readPosPtr  = (uint32_t*)(param1 + 0x20000);
+//         uint32_t* writePosPtr = (uint32_t*)(param1 + 0x20004);
+//         char* base = (char*)param1;
+//         uint32_t readPos  = *readPosPtr;
+//         uint32_t writePos = *writePosPtr;
+
+//         while(readPos != writePos){
+//             if(readPos > 0xFFFF){
+//                 readPos = 0;
+//             }
+            
+//             uint32_t packetLen = *(uint32_t*)(base + readPos);
+//             readPos += 4;
+
+//             char* packet = base + readPos;
+//             if (*(uint16_t*)packet == 0x4E42){  // "BN"
+//                 Hook_HandleBNPacket(param1, 0, 0, packet, packetLen);
+//             }
+//             else{
+//                 auto startelse = std::chrono::high_resolution_clock::now();
+//                 void* object = *(void**)(param1 + 0x20008);
+//                 void** vtable = *(void***)object;
+//                 typedef void (__fastcall* VTableFunc)(void* thisPtr, void* edx, int p1, char* p2, uint32_t p3, int p4);
+//                 VTableFunc func = (VTableFunc)vtable[1];
+//                 func(object, 0, 0, packet, packetLen, 0);
+//                 auto endelse = std::chrono::high_resolution_clock::now();
+//                 auto durationelse = std::chrono::duration_cast<std::chrono::microseconds>(endelse - startelse);
+//                 Log("Elsefunction: " + std::to_string(durationelse.count()) + " μs");
+//                 Log("Object address: " + std::to_string((uintptr_t)object));
+//                 Log("Vtable address: " + std::to_string((uintptr_t)vtable));
+//                 Log("vtable[0] address: " + std::to_string((uintptr_t)vtable[0]));
+//                 Log("vtable[1] address: " + std::to_string((uintptr_t)vtable[1]));
+//                 Log("vtable[2] address: " + std::to_string((uintptr_t)vtable[2]));
+
+//             }
+            
+//             readPos += packetLen;
+//             readPos += (4 - (packetLen & 3)) & 3;  // Alignment
+            
+//             writePos = *writePosPtr;
+//         }
+//         *readPosPtr = readPos;
+//     }
+
+//     auto end = std::chrono::high_resolution_clock::now();
+//     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+//     Log("ProcessResourceQueue: " + std::to_string(duration.count()) + " μs");
+// }
 
 
 typedef void (__fastcall* InitShadowCachePtr_t)(uint32_t param1);
@@ -190,6 +223,20 @@ PreloadInitialAssetsWrapperPtr_t g_originalPreloadInitialAssetsWrapperPtr=nullpt
 
 void __fastcall Hook_PreloadInitialAssetsWrapper(uint32_t param1){
     return;
+}
+
+typedef void (__fastcall* FlushTracerPtr_t)(int *param1);
+FlushTracerPtr_t g_originalFlushTracerPtr=nullptr;
+
+void __fastcall Hook_FlushTracer(int *param1){
+    return;
+    // auto start = std::chrono::high_resolution_clock::now();
+
+    // g_originalFlushTracerPtr(param1);
+
+    // auto end = std::chrono::high_resolution_clock::now();
+    // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    // Log("FlushTracer: " + std::to_string(duration.count()) + " μs");
 }
 
 
@@ -285,6 +332,43 @@ void InstallHook() {
         (LPVOID*)&g_originalPreloadInitialAssetsWrapperPtr) == MH_OK) {
             if (MH_EnableHook(targetAddr_PreloadInitialAssetsWrapper) == MH_OK) {
                 Log("PreloadInitialAssetsWrapper hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+
+    void* targetAddr_FlushTracer = (void*)(0x733780); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_FlushTracer, &Hook_FlushTracer, 
+        (LPVOID*)&g_originalFlushTracerPtr) == MH_OK) {
+            if (MH_EnableHook(targetAddr_FlushTracer) == MH_OK) {
+                Log("FlushTracer hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_ResourcePacketDispatcher = (void*)(0x5314e0); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_ResourcePacketDispatcher, &Hook_ResourcePacketDispatcher, 
+        (LPVOID*)&g_originalResourcePacketPtr) == MH_OK) {
+            if (MH_EnableHook(targetAddr_ResourcePacketDispatcher) == MH_OK) {
+                Log("ResourcePacketDispatcher hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_ResourceQueue_UnpackAndTrace = (void*)(0x781840); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_ResourceQueue_UnpackAndTrace, &Hook_ResourceQueue_UnpackAndTrace, 
+        (LPVOID*)&g_originalResourceQueue_UnpackAndTracePtr) == MH_OK) {
+            if (MH_EnableHook(targetAddr_ResourceQueue_UnpackAndTrace) == MH_OK) {
+                Log("ResourceQueue_UnpackAndTrace hook installed successfully");
             } else {
                 Log("Failed to enable hook");
             }

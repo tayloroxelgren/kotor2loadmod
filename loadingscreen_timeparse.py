@@ -37,7 +37,11 @@ def main():
         ("ProcessResourceQueue", re.compile(r'ProcessResourceQueue:\s*(\d+)\s*μs')),
         ("InitShadowCache", re.compile(r'InitShadowCache:\s*(\d+)\s*μs')),
         ("LoadResourceBlockOrFallback", re.compile(r'LoadResourceBlockOrFallback:\s*(\d+)\s*μs')),
-        ("HandleBNPacket", re.compile(r'HandleBNPacket:\s*(\d+)\s*μs'))
+        ("HandleBNPacket", re.compile(r'HandleBNPacket:\s*(\d+)\s*μs')),
+        ("FlushTracer", re.compile(r'FlushTracer:\s*(\d+)\s*μs')),
+        ("Elsefunction", re.compile(r'Elsefunction:\s*(\d+)\s*μs')),
+        ("ResourcePacketDispatcher", re.compile(r'ResourcePacketDispatcher:\s*(\d+)\s*μs')),
+        ("ResourceQueue_UnpackAndTrace", re.compile(r'ResourceQueue_UnpackAndTrace:\s*(\d+)\s*μs'))
     ]
 
     for name, p in patterns:

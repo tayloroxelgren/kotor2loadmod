@@ -16,6 +16,8 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_00407920` **GameMain**: Most likely the main function of the game
 - `FUN_00781be0` **Engine**: Seems to have the main engine logic
 - `FUN_00703f30` **ProcessResourceQueue**: Empties a 64 KB ring buffer of loading-time “packets,” handing each packet to the right handler (special handler if the packet starts with BN, otherwise the generic resource loader) until the queue is empty.
+- `FUN_00781840` **ResourceQueue_UnpackAndTrace**: Unpacks a single resource‐queue packet with full tracer setup/flush; wraps the call in the Concurrency scheduler and records timing/log data before invoking the real dispatch.
+- `FUN_005314e0` **ResourcePacketDispatcher**: Core dispatcher that examines the first byte of each packet (e.g. 's' vs. 'p'), checks the subsystem’s enable flags, and forwards the packet to the appropriate handler routine.
 - `FUN_00718e40` **LoadResourceBlockOrFallback**: Tries to load a resource block by type & ID; if it’s missing, invalid, or too small, it copies a default 4-word fallback instead and clears the “found” flag; only when valid data exists does it set the flag and process the payload.
 - `FUN_00717820` **GetResourceDataPtr**: Checks that the resource manager and entry are valid and in bounds; if so, returns a pointer to the entry’s data block and writes its byte-length into the out parameter, otherwise returns 0.
 - `FUN_0053a0c0` **InitGraphicsCache**: During loading screen, this ticks its timer, loops over every object, and pulls in any missing textures or meshes into GPU memory. It also handles one-off setup like shadow-map building.

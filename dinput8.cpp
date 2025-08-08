@@ -253,6 +253,19 @@ uint32_t __cdecl Hook_PpacketHandler(char *param1,int param2){
     Log("PpacketHandler: " + std::to_string(duration.count()) + " μs");
 }
 
+typedef uint32_t (__cdecl* SpacketHandlerPtr_t)(char *param1,int param2);
+SpacketHandlerPtr_t g_originalSpacketHandler= nullptr;
+
+uint32_t __cdecl Hook_SpacketHandler(char *param1,int param2){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalSpacketHandler(param1,param2);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("SpacketHandler: " + std::to_string(duration.count()) + " μs");
+}
+
 
 
 void InstallHook() {
@@ -396,6 +409,19 @@ void InstallHook() {
     if (MH_CreateHook(targetAddr_PpacketHandler, &Hook_PpacketHandler, 
         (LPVOID*)&g_originalPpacketHandler) == MH_OK) {
             if (MH_EnableHook(targetAddr_PpacketHandler) == MH_OK) {
+                Log("PpacketHandler hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+
+    void* targetAddr_SpacketHandler = (void*)(0x884530); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_SpacketHandler, &Hook_SpacketHandler, 
+        (LPVOID*)&g_originalSpacketHandler) == MH_OK) {
+            if (MH_EnableHook(targetAddr_SpacketHandler) == MH_OK) {
                 Log("PpacketHandler hook installed successfully");
             } else {
                 Log("Failed to enable hook");

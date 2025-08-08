@@ -42,7 +42,8 @@ def main():
         ("Elsefunction", re.compile(r'Elsefunction:\s*(\d+)\s*μs')),
         ("ResourcePacketDispatcher", re.compile(r'ResourcePacketDispatcher:\s*(\d+)\s*μs')),
         ("ResourceQueue_UnpackAndTrace", re.compile(r'ResourceQueue_UnpackAndTrace:\s*(\d+)\s*μs')),
-        ("PpacketHandler", re.compile(r'PpacketHandler:\s*(\d+)\s*μs'))
+        ("PpacketHandler", re.compile(r'PpacketHandler:\s*(\d+)\s*μs')),
+        ("SpacketHandler", re.compile(r'SpacketHandler:\s*(\d+)\s*μs'))
     ]
 
     for name, p in patterns:

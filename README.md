@@ -63,11 +63,13 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_0091caeb` **_fopen**: C standard library
 - `FUN_00475ab0` **OpenOrStreamGameFile**: Opens a game asset or streams it?
 - `FUN_004762f0` **ReadGameAssetChunk**: Reads a block of game asset data from either an open file stream or an already-loaded memory buffer. If reading from disk, allocates memory and performs I/O. If reading from memory, returns a pointer to the requested chunk and advances the buffer pointer without performing any file I/O.
+- `FUN_0045a030` **Gob::LoadFromFileOrStream**: Loads a Gob game object from disk or an in-memory stream, initializes its subcomponents, and registers it with the game world.
 
 
 ### Classes
 - `0x009AA224`  **CSWGuiMainCharGen::vftable**: Seems to be the class for character creation
 - `0x0099C460`  **CResGFF::vftable**: Generic File Format (GFF) loader used to parse and provide access to resources like UTC, UTI, ARE, etc
+- `0x0098B5CC`  **Gob::vftable**: Base game object class used to represent in-world entities. Contains a wide range of virtual functions for lifecycle management, serialization, rendering, and asset loading.  
 
 
 ## Build Instructions

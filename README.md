@@ -62,6 +62,7 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_00934C70` **OpenGameAsset**: Low Level call to open a game asset
 - `FUN_0091caeb` **_fopen**: C standard library
 - `FUN_00475ab0` **OpenOrStreamGameFile**: Opens a game asset or streams it?
+- `FUN_004762f0` **ReadGameAssetChunk**: Reads a block of game asset data from either an open file stream or an already-loaded memory buffer. If reading from disk, allocates memory and performs I/O. If reading from memory, returns a pointer to the requested chunk and advances the buffer pointer without performing any file I/O.
 
 
 ### Classes

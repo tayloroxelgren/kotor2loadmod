@@ -53,6 +53,12 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_00523870` **LoadModuleEnvironmentAndUI**: Character Creation Screen?
 - `FUN_0055A460` **ModuleLoadCoordinator**: Allocates a loader object
 - `FUN_00521360` **AreaConstructor**: Constructor for an area/scene object. Initializes vtables, allocates subcomponents, and prepares structures for later resource loading (no direct disk reads).
+- `FUN_0055a460` **LoadOrCreateAreaAndInit**: High-level scene/area loader.Decides whether to reuse or create a new area object, initializes it, and begins environment/UI setup. Delegates actual asset streaming to deeper loader functions.
+- `FUN_00647050` **EnqueueStreamingRequest**: Builds a small command packet (opcode 0x50) and pushes it into the streaming system’s ring buffer via a vtable call to the streaming manager at DAT_00a1b4a4 + 8. This is the entry point for loading/streaming assets from disk.
+- `FUN_00637270` **RequestResourceStream**: Prepares parameters for a resource/asset request, does some validation, and then calls the streaming enqueue function
+- `FUN_00401730` **InitResourceManager**: Allocates and initializes the core resource manager structure, creating subcomponents for streaming, resource metadata, and asset caches, and setting up internal state for game resource loading.
+- `FUN_0073ef30` **InitClientExoApp**: Sets up the game’s core client application object
+- `FUN_00780460` **InitClientCoreSystems**: Allocates and zero-initializes the main client game object, then sets up dozens of subsystems (resource queues, streaming buffers, graphics/audio settings, network structures, and various runtime managers).
 
 ### Classes
 - `0x009AA224`  **CSWGuiMainCharGen::vftable**: Seems to be the class for character creation

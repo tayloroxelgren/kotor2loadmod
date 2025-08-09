@@ -59,6 +59,10 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_00401730` **InitResourceManager**: Allocates and initializes the core resource manager structure, creating subcomponents for streaming, resource metadata, and asset caches, and setting up internal state for game resource loading.
 - `FUN_0073ef30` **InitClientExoApp**: Sets up the game’s core client application object
 - `FUN_00780460` **InitClientCoreSystems**: Allocates and zero-initializes the main client game object, then sets up dozens of subsystems (resource queues, streaming buffers, graphics/audio settings, network structures, and various runtime managers).
+- `FUN_00934C70` **OpenGameAsset**: Low Level call to open a game asset
+- `FUN_0091caeb` **_fopen**: C standard library
+- `FUN_00475ab0` **OpenOrStreamGameFile**: Opens a game asset or streams it?
+
 
 ### Classes
 - `0x009AA224`  **CSWGuiMainCharGen::vftable**: Seems to be the class for character creation

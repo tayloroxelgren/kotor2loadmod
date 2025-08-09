@@ -41,7 +41,7 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_00781590` **PreloadAssets**: Loads assets
 - `FUN_00811450` **ModuleHandler**: Loads and initializes each game module, bringing in level data, assets, and scripts needed for the world.
 - `FUN_0080deb0` **GameObjUpdate**: Processes incoming object-update packets, creating or refreshing in-game entities and syncing their state during the loading phase.
-- `FUN_007BE4C0` **ModuleChunkLoadCore**: Wrapper Allocates and parses a module’s sub-chunks, updates the loading screen between groups, and marks the chunk as done.
+- `FUN_007BE4C0` **ModuleChunkLoadCore**: Allocates and parses a module’s sub-chunks, updates the loading screen between groups, and marks the chunk as done.
 - `FUN_0073F870` **ModuleChunkLoadWrapperA**: Wrapper for ModuleChunkLoadCore
 - `FUN_0078C330` **ModuleChunkLoadWrapperB**: Wrapper for ModuleChunkLoadCore
 - `FUN_00747210` **InitializeGameUI**: Constructs and configures the entire in-game user interface
@@ -50,9 +50,13 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_008C19F0` **DebugMenuContructor**: Makes debug menu?
 - `FUN_0085FBE0` **CSWCAnimBase_LoadModel**: Loads an animated model for a world character
 - `FUN_00904A80` **CharacterCreationScreen**: Character Creation Screen?
+- `FUN_00523870` **LoadModuleEnvironmentAndUI**: Character Creation Screen?
+- `FUN_0055A460` **ModuleLoadCoordinator**: Allocates a loader object
+- `FUN_00521360` **AreaConstructor**: Constructor for an area/scene object. Initializes vtables, allocates subcomponents, and prepares structures for later resource loading (no direct disk reads).
 
 ### Classes
 - `0x009AA224`  **CSWGuiMainCharGen::vftable**: Seems to be the class for character creation
+- `0x0099C460`  **CResGFF::vftable**: Generic File Format (GFF) loader used to parse and provide access to resources like UTC, UTI, ARE, etc
 
 
 ## Build Instructions

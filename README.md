@@ -8,6 +8,7 @@ The mod is in early development, but currently enables the inital splash screens
 Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 
 ## What has been identified so far?
+### Functions
 - `FUN_00533830` **LoadingScreen**: This appears to be the main function that initiates the loading screens in the game
 
 - `FUN_0051c470` **LoadingScreenWrapper**: Seems to just be a wrapper to call LoadingScreen
@@ -45,6 +46,13 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_0078C330` **ModuleChunkLoadWrapperB**: Wrapper for ModuleChunkLoadCore
 - `FUN_00747210` **InitializeGameUI**: Constructs and configures the entire in-game user interface
 - `FUN_00919723` **AllocateMemoryOrThrow**: General memory allocator
+- `FUN_00855F30` **PopulateSaveGameEntry**: Parses a single save file’s metadata and assets—reads playtime, area name, timestamps, hints, corruption flags, screenshots, thumbnails, etc.—and fills in the UI data structure used by the save-selection screen
+- `FUN_008C19F0` **DebugMenuContructor**: Makes debug menu?
+- `FUN_0085FBE0` **CSWCAnimBase_LoadModel**: Loads an animated model for a world character
+- `FUN_00904A80` **CharacterCreationScreen**: Character Creation Screen?
+
+### Classes
+- `0x009AA224`  **CSWGuiMainCharGen::vftable**: Seems to be the class for character creation
 
 
 ## Build Instructions

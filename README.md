@@ -82,8 +82,6 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 
 - `FUN_00883560` **InitializeAndSyncState**: A major function that performs a series of game state updates, logs a formatted message, and sends it over the network. It also calls `FUN_007045b0` to send a specific message and interacts with a resource scheduler to manage concurrent tasks.
 
-- `FUN_00884450` **SendMessageWithSHeader**: This function constructs and sends a network message prefixed with the byte `0x73`, which is different from the `0x53` message sent by `FUN_00665280`. It copies the payload from a source function (`FUN_00734010`).
-
 - `FUN_008faca0` **ModuleLoadSynchronization**: A critical state-change function, similar to `FUN_00883560`, that synchronizes game data. It updates multiple game variables, logs a formatted message, sends it over the network, and interacts with the resource scheduler to manage assets and tasks.
 
 

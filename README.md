@@ -65,6 +65,26 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_004762f0` **ReadGameAssetChunk**: Reads a block of game asset data from either an open file stream or an already-loaded memory buffer. If reading from disk, allocates memory and performs I/O. If reading from memory, returns a pointer to the requested chunk and advances the buffer pointer without performing any file I/O.
 - `FUN_0045a030` **Gob::LoadFromFileOrStream**: Loads a Gob game object from disk or an in-memory stream, initializes its subcomponents, and registers it with the game world.
 - `FUN_007ac470` **UpdatePlayerInputAndTargeting**: Per-frame player control and targeting loop. Reads input devices (mouse/gamepad) for look movement, applies sensitivity/inversion settings, updates camera pitch/yaw, and scans nearby objects for valid interaction/target highlighting. Writes results to HUD and interaction state.
+- `FUN_0051eed0` **LoadEventQueueFromConfig**: Iterates the "EventQueue" section, allocates and initializes event nodes from each entry, enqueuing successful ones and freeing failures.
+- `FUN_005205f0` **BuildEventFromConfigEntry**: Reads one "EventQueue" entry, fills common fields (tag/ids), and deserializes a typed "EventData" payload based on EventId (allocating and constructing the appropriate struct). Returns 1 on success, 0 for invalid EventId
+- `FUN_00423AB0` **ParseTXIAndBuildTextureController**: “Parses TXI directives for a texture: creates the appropriate procedural texture controller from proceduretype and applies all TXI flags/params (mipmaps, clamp, bump, envmap, etc.). Finally lets the controller parse its own extra options.”
+- `FUN_00423000` **CAurTextureBasic::Ctor**: Constructs a texture object, sets defaults, stores names, allocates helper state
+- `FUN_00424B10` **Texture_ApplyTXIAndBuildController**: Constructs a texture object, sets defaults, stores names, allocates helper state
+- `FUN_00704060` **NetLayer::SendMessageToPlayer**: Writes a message into the player’s outgoing network buffer. Validates available space to avoid overflow (logging a detailed dump if it would exceed the buffer), copies the message length and payload into the queue, and advances the write pointer. This is what sends packets to ProcessResourceQueue
+- `FUN_00665280` **SendMessageWithSHeader**: This function constructs and sends a network message prefixed with the byte `0x53` to a specific player. It allocates a buffer, copies data from a source function (`FUN_00734010`), and sends it using `NetLayer::SendMessageToPlayer`.
+- `FUN_007045b0` **SendBNCSUMessage**: This function sends a network message with a hardcoded, 9-byte header of `0x42 0x4e 0x43 0x53 0x55`. It first checks a state flag to prevent the message from being sent repeatedly. It then copies the payload from `FUN_00734010`, sends the message to a player, and updates several state variables.
+- `FUN_00704970` **HandleIncomingBNCRPacket**: This function acts as a message handler. It receives an incoming packet, validates its structure, and then processes it based on a value in the packet's header (`local_14`). It constructs and sends a new, 10-byte response message with the header `0x42 0x4e 0x43 0x52`, and updates various game state flags based on the type of incoming message.
+- `FUN_00812350` **HandleNetEvents**: This function acts as a dispatcher for various network events, based on a single character parameter. It handles different cases:
+    - `param_1 == 1`: Logs a formatted message and sends a network packet prefixed with `0x73`.
+    - `param_1 == 2`: Performs a specific state change by calling `FUN_0073f890`.
+    - `param_1 == 3`: Handles a complex multi-step event by checking flags and calling other functions.
+- `FUN_0087a350` **SendMessageWithPHeader**: Sends a compact, 3-byte network message with a header of `0x70` and two variable parameters.
+
+- `FUN_00883560` **InitializeAndSyncState**: A major function that performs a series of game state updates, logs a formatted message, and sends it over the network. It also calls `FUN_007045b0` to send a specific message and interacts with a resource scheduler to manage concurrent tasks.
+
+- `FUN_00884450` **SendMessageWithSHeader**: This function constructs and sends a network message prefixed with the byte `0x73`, which is different from the `0x53` message sent by `FUN_00665280`. It copies the payload from a source function (`FUN_00734010`).
+
+- `FUN_008faca0` **ModuleLoadSynchronization**: A critical state-change function, similar to `FUN_00883560`, that synchronizes game data. It updates multiple game variables, logs a formatted message, sends it over the network, and interacts with the resource scheduler to manage assets and tasks.
 
 
 ### Classes

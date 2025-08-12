@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <mutex>
 #include <unordered_set>
+#include <atomic>
 
 // DirectInput8 proxy
 typedef HRESULT(WINAPI *DICREATE)(HINSTANCE, DWORD, REFIID, LPVOID*, LPUNKNOWN);
@@ -109,67 +110,61 @@ typedef void (__fastcall* ProcessResourceQueuePtr_t)(int param1, void*,int param
 ProcessResourceQueuePtr_t g_originalProcessResourceQueuePtr = nullptr;
 
 
-void __fastcall Hook_ProcessResourceQueue(int param1, void*,int param2){
-    auto start = std::chrono::high_resolution_clock::now();
-    g_originalProcessResourceQueuePtr(param1,nullptr,param2);
-
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    Log("ProcessResourceQueue: " + std::to_string(duration.count()) + " μs");
-}
-
-// void __fastcall Hook_ProcessResourceQueue(int param1, void*, int param2){
+// void __fastcall Hook_ProcessResourceQueue(int param1, void*,int param2){
 //     auto start = std::chrono::high_resolution_clock::now();
-
-//     if(param2 != 0){
-//         uint32_t* readPosPtr  = (uint32_t*)(param1 + 0x20000);
-//         uint32_t* writePosPtr = (uint32_t*)(param1 + 0x20004);
-//         char* base = (char*)param1;
-//         uint32_t readPos  = *readPosPtr;
-//         uint32_t writePos = *writePosPtr;
-
-//         while(readPos != writePos){
-//             if(readPos > 0xFFFF){
-//                 readPos = 0;
-//             }
-            
-//             uint32_t packetLen = *(uint32_t*)(base + readPos);
-//             readPos += 4;
-
-//             char* packet = base + readPos;
-//             if (*(uint16_t*)packet == 0x4E42){  // "BN"
-//                 Hook_HandleBNPacket(param1, 0, 0, packet, packetLen);
-//             }
-//             else{
-//                 auto startelse = std::chrono::high_resolution_clock::now();
-//                 void* object = *(void**)(param1 + 0x20008);
-//                 void** vtable = *(void***)object;
-//                 typedef void (__fastcall* VTableFunc)(void* thisPtr, void* edx, int p1, char* p2, uint32_t p3, int p4);
-//                 VTableFunc func = (VTableFunc)vtable[1];
-//                 func(object, 0, 0, packet, packetLen, 0);
-//                 auto endelse = std::chrono::high_resolution_clock::now();
-//                 auto durationelse = std::chrono::duration_cast<std::chrono::microseconds>(endelse - startelse);
-//                 Log("Elsefunction: " + std::to_string(durationelse.count()) + " μs");
-//                 Log("Object address: " + std::to_string((uintptr_t)object));
-//                 Log("Vtable address: " + std::to_string((uintptr_t)vtable));
-//                 Log("vtable[0] address: " + std::to_string((uintptr_t)vtable[0]));
-//                 Log("vtable[1] address: " + std::to_string((uintptr_t)vtable[1]));
-//                 Log("vtable[2] address: " + std::to_string((uintptr_t)vtable[2]));
-
-//             }
-            
-//             readPos += packetLen;
-//             readPos += (4 - (packetLen & 3)) & 3;  // Alignment
-            
-//             writePos = *writePosPtr;
-//         }
-//         *readPosPtr = readPos;
-//     }
+//     g_originalProcessResourceQueuePtr(param1,nullptr,param2);
 
 //     auto end = std::chrono::high_resolution_clock::now();
 //     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 //     Log("ProcessResourceQueue: " + std::to_string(duration.count()) + " μs");
 // }
+
+void __fastcall Hook_ProcessResourceQueue(int param1, void*, int param2){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t packetcounter=0;
+    if(param2 != 0){
+        uint32_t* readPosPtr  = (uint32_t*)(param1 + 0x20000);
+        uint32_t* writePosPtr = (uint32_t*)(param1 + 0x20004);
+        char* base = (char*)param1;
+        uint32_t readPos  = *readPosPtr;
+        uint32_t writePos = *writePosPtr;
+        while(readPos != writePos){
+            packetcounter++;
+            Log("Number of packets: " + std::to_string(packetcounter));
+            if(readPos > 0xFFFF){
+                readPos = 0;
+            }
+            
+            uint32_t packetLen = *(uint32_t*)(base + readPos);
+            readPos += 4;
+
+            char* packet = base + readPos;
+            if (*(uint16_t*)packet == 0x4E42){  // "BN"
+                Hook_HandleBNPacket(param1, 0, 0, packet, packetLen);
+            }
+            else{
+                auto startelse = std::chrono::high_resolution_clock::now();
+                void* object = *(void**)(param1 + 0x20008);
+                void** vtable = *(void***)object;
+                typedef void (__fastcall* VTableFunc)(void* thisPtr, void* edx, int p1, char* p2, uint32_t p3, int p4);
+                VTableFunc func = (VTableFunc)vtable[1];
+                func(object, 0, 0, packet, packetLen, 0);
+            }
+            
+            readPos += packetLen;
+            readPos += (4 - (packetLen & 3)) & 3;  // Alignment
+            
+            writePos = *writePosPtr;
+        }
+        *readPosPtr = readPos;
+    }
+    
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("ProcessResourceQueue: " + std::to_string(duration.count()) + " μs");
+    
+}
 
 
 typedef void (__fastcall* InitShadowCachePtr_t)(uint32_t param1);
@@ -299,11 +294,12 @@ ModuleChunkLoadCorePtr_t g_originalModuleChunkLoadCore=nullptr;
 uint32_t __cdecl Hook_ModuleChunkLoadCore(int param1){
     auto start = std::chrono::high_resolution_clock::now();
 
-    g_originalModuleChunkLoadCore(param1);
+    uint32_t result=g_originalModuleChunkLoadCore(param1);
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     Log("ModuleChunkLoadCore: " + std::to_string(duration.count()) + " μs");
+    return result;
 }
 
 
@@ -318,6 +314,19 @@ void __cdecl Hook_LoadingScreenUpdateFrame(uint32_t param1,int param2,int param3
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     Log("LoadingScreenUpdateFrame: " + std::to_string(duration.count()) + " μs");
+}
+
+typedef void (__cdecl* ConfigParsePtr_t)(char* filename);
+ConfigParsePtr_t g_originalConfigParse=nullptr;
+
+void __cdecl Hook_ConfigParse(char* filename){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalConfigParse(filename);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("ConfigParse: " + std::to_string(duration.count()) + " μs");
 }
 
 
@@ -532,6 +541,18 @@ void InstallHook() {
             Log("Failed to create hook");
         }
 
+    void* targetAddr_ConfigParse = (void*)(0x4763b0);
+    if (MH_CreateHook(targetAddr_ConfigParse, &Hook_ConfigParse, 
+        (LPVOID*)&g_originalConfigParse) == MH_OK) {
+            if (MH_EnableHook(targetAddr_ConfigParse) == MH_OK) {
+                Log("LoadingScreenUpdateFrame hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
 
 
 }
@@ -561,7 +582,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
             
             // Install hook after delay
             CreateThread(nullptr, 0, [](LPVOID) -> DWORD {
-                Sleep(10);//oringal 3000
+                Sleep(10);
                 InstallHook();
                 return 0;
             }, nullptr, 0, nullptr);

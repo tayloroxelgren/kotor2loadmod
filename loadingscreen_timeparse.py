@@ -50,7 +50,10 @@ def main():
         ("LoadingScreenUpdateFrame", re.compile(r'LoadingScreenUpdateFrame:\s*(\d+)\s*μs')),
         ("GameObjUpdate", re.compile(r'GameObjUpdate:\s*(\d+)\s*μs')),
         ("LevelLoaderAndInitializer", re.compile(r'LevelLoaderAndInitializer:\s*(\d+)\s*μs')),
-        ("DebugMenuConstructor", re.compile(r'DebugMenuConstructor:\s*(\d+)\s*μs'))
+        ("DebugMenuConstructor", re.compile(r'DebugMenuConstructor:\s*(\d+)\s*μs')),
+        ("fopen", re.compile(r'fopen:\s*(\d+)\s*μs')),
+        ("gobconstructor", re.compile(r'gobconstructor:\s*(\d+)\s*μs')),
+        ("areaconstructor", re.compile(r'areaconstructor:\s*(\d+)\s*μs'))
     ]
 
     for name, p in patterns:

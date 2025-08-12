@@ -63,6 +63,7 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_0091caeb` **_fopen**: C standard library
 - `FUN_00475ab0` **OpenOrStreamGameFile**: Opens a game asset or streams it?
 - `FUN_004762f0` **ReadGameAssetChunk**: Reads a block of game asset data from either an open file stream or an already-loaded memory buffer. If reading from disk, allocates memory and performs I/O. If reading from memory, returns a pointer to the requested chunk and advances the buffer pointer without performing any file I/O.
+- `FUN_00458b70` **Gob::constructor**: Constructs a game object
 - `FUN_0045a030` **Gob::LoadFromFileOrStream**: Loads a Gob game object from disk or an in-memory stream, initializes its subcomponents, and registers it with the game world.
 - `FUN_007ac470` **UpdatePlayerInputAndTargeting**: Per-frame player control and targeting loop. Reads input devices (mouse/gamepad) for look movement, applies sensitivity/inversion settings, updates camera pitch/yaw, and scans nearby objects for valid interaction/target highlighting. Writes results to HUD and interaction state.
 - `FUN_0051eed0` **LoadEventQueueFromConfig**: Iterates the "EventQueue" section, allocates and initializes event nodes from each entry, enqueuing successful ones and freeing failures.

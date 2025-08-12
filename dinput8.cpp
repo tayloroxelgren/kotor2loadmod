@@ -25,16 +25,17 @@ void Log(const std::string& msg) {
 }
 
 
-typedef void (__fastcall* LoadAndInitializePtr_t)(void* thisPtr, int param1, uint32_t param2, int param3);
+typedef int (__fastcall* LoadAndInitializePtr_t)(void* thisPtr, int param1, uint32_t param2, int param3);
 LoadAndInitializePtr_t g_originalLoadAndInitializePtr = nullptr;
 
-void __fastcall Hook_LoadAndInitializePtr(void* thisPtr, int param1, uint32_t param2, int param3) {
-    // Timing seems to mess up this function
-    // auto start = std::chrono::high_resolution_clock::now();
-    g_originalLoadAndInitializePtr(thisPtr, param1, param2, param3);
-    // auto end = std::chrono::high_resolution_clock::now();
-    // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    // Log("LoadAndInitialize: " + std::to_string(duration.count()) + " μs");
+int __fastcall Hook_LoadAndInitializePtr(void* thisPtr, int param1, uint32_t param2, int param3) {
+    // Was crashing due to function actually returning an int value
+    auto start = std::chrono::high_resolution_clock::now();
+    int result=g_originalLoadAndInitializePtr(thisPtr, param1, param2, param3);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("LoadAndInitialize: " + std::to_string(duration.count()) + " μs");
+    return result;
     
 }
 
@@ -321,12 +322,27 @@ ConfigParsePtr_t g_originalConfigParse=nullptr;
 
 void __cdecl Hook_ConfigParse(char* filename){
     auto start = std::chrono::high_resolution_clock::now();
-
+    
     g_originalConfigParse(filename);
-
+    
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     Log("ConfigParse: " + std::to_string(duration.count()) + " μs");
+}
+
+typedef int (__cdecl* LevelLoaderAndInitializerPtr_t)(char* filename,char *param_2,int param_3,uint32_t param_4);
+LevelLoaderAndInitializerPtr_t g_originalLevelLoaderAndInitializer=nullptr;
+
+int __cdecl Hook_LevelLoaderAndInitializer(char* filename,char *param_2,int param_3,uint32_t param_4){
+    auto start = std::chrono::high_resolution_clock::now();
+    
+    Log("Loading from file: "+std::string(filename));
+    int result =g_originalLevelLoaderAndInitializer(filename,param_2,param_3,param_4);
+    
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("LevelLoaderAndInitializer: " + std::to_string(duration.count()) + " μs");
+    return result;
 }
 
 
@@ -545,7 +561,19 @@ void InstallHook() {
     if (MH_CreateHook(targetAddr_ConfigParse, &Hook_ConfigParse, 
         (LPVOID*)&g_originalConfigParse) == MH_OK) {
             if (MH_EnableHook(targetAddr_ConfigParse) == MH_OK) {
-                Log("LoadingScreenUpdateFrame hook installed successfully");
+                Log("ConfigParse hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_LevelLoaderAndInitializer = (void*)(0x462320);
+    if (MH_CreateHook(targetAddr_LevelLoaderAndInitializer, &Hook_LevelLoaderAndInitializer, 
+        (LPVOID*)&g_originalLevelLoaderAndInitializer) == MH_OK) {
+            if (MH_EnableHook(targetAddr_LevelLoaderAndInitializer) == MH_OK) {
+                Log("LevelLoaderAndInitializer hook installed successfully");
             } else {
                 Log("Failed to enable hook");
             }

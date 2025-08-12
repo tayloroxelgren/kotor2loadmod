@@ -34,6 +34,7 @@ def main():
 
     patterns = [
         ("loadingscreen", re.compile(r'loadingscreen:\s*(\d+)\s*μs')),
+        ("LoadAndInitialize", re.compile(r'LoadAndInitialize:\s*(\d+)\s*μs')),
         ("ProcessResourceQueue", re.compile(r'ProcessResourceQueue:\s*(\d+)\s*μs')),
         ("InitShadowCache", re.compile(r'InitShadowCache:\s*(\d+)\s*μs')),
         ("LoadResourceBlockOrFallback", re.compile(r'LoadResourceBlockOrFallback:\s*(\d+)\s*μs')),
@@ -47,7 +48,8 @@ def main():
         ("ModuleHandler", re.compile(r'ModuleHandler:\s*(\d+)\s*μs')),
         ("ModuleChunkLoadCore", re.compile(r'ModuleChunkLoadCore:\s*(\d+)\s*μs')),
         ("LoadingScreenUpdateFrame", re.compile(r'LoadingScreenUpdateFrame:\s*(\d+)\s*μs')),
-        ("GameObjUpdate", re.compile(r'GameObjUpdate:\s*(\d+)\s*μs'))
+        ("GameObjUpdate", re.compile(r'GameObjUpdate:\s*(\d+)\s*μs')),
+        ("LevelLoaderAndInitializer", re.compile(r'LevelLoaderAndInitializer:\s*(\d+)\s*μs'))
     ]
 
     for name, p in patterns:

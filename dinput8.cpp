@@ -330,13 +330,14 @@ void __cdecl Hook_ConfigParse(char* filename){
     Log("ConfigParse: " + std::to_string(duration.count()) + " μs");
 }
 
-typedef int (__cdecl* LevelLoaderAndInitializerPtr_t)(char* filename,char *param_2,int param_3,uint32_t param_4);
+typedef int (__cdecl* LevelLoaderAndInitializerPtr_t)(char* filename,char* param_2,int param_3,uint32_t param_4);
 LevelLoaderAndInitializerPtr_t g_originalLevelLoaderAndInitializer=nullptr;
 
-int __cdecl Hook_LevelLoaderAndInitializer(char* filename,char *param_2,int param_3,uint32_t param_4){
+int __cdecl Hook_LevelLoaderAndInitializer(char* filename,char* param_2,int param_3,uint32_t param_4){
     auto start = std::chrono::high_resolution_clock::now();
     
     Log("Loading from file: "+std::string(filename));
+    Log("param2: "+std::string(param_2));
     int result =g_originalLevelLoaderAndInitializer(filename,param_2,param_3,param_4);
     
     auto end = std::chrono::high_resolution_clock::now();
@@ -345,6 +346,19 @@ int __cdecl Hook_LevelLoaderAndInitializer(char* filename,char *param_2,int para
     return result;
 }
 
+
+typedef uint32_t* (__cdecl* DebugMenuContructorPtr_t)(uint32_t param1);
+DebugMenuContructorPtr_t g_originalDebugMenuConstructor=nullptr;
+uint32_t* __cdecl Hook_DebugMenuConstructor(uint32_t param1){
+        auto start = std::chrono::high_resolution_clock::now();
+    
+    // uint32_t* result =g_originalDebugMenuConstructor(param1);
+    
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("DebugMenuConstructor: " + std::to_string(duration.count()) + " μs");
+    return 0;
+}
 
 void InstallHook() {
     
@@ -574,6 +588,18 @@ void InstallHook() {
         (LPVOID*)&g_originalLevelLoaderAndInitializer) == MH_OK) {
             if (MH_EnableHook(targetAddr_LevelLoaderAndInitializer) == MH_OK) {
                 Log("LevelLoaderAndInitializer hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_DebugMenuConstructor = (void*)(0x8C19F0);
+    if (MH_CreateHook(targetAddr_DebugMenuConstructor, &Hook_DebugMenuConstructor, 
+        (LPVOID*)&g_originalDebugMenuConstructor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_DebugMenuConstructor) == MH_OK) {
+                Log("DebugMenuConstructor hook installed successfully");
             } else {
                 Log("Failed to enable hook");
             }

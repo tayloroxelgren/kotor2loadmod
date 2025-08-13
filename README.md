@@ -96,12 +96,26 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_00408af0` **Window_CreateRender**: This function creates a secondary, specialized window dedicated to rendering the game's graphics. It registers a new window class with the name "Render Window," then creates the window itself. The handle to this window is stored in a global variable, DAT_00a1b484, and is the surface where the game's visuals are drawn.
 - `FUN_004763b0` **ConfigParse**: Takes a filename as a parameter and parses the file. Parses a file named startup.txt, unsure what it is for
 - `FUN_00462320` **LevelLoaderAndInitializer**: This function acts as a level loader and object factory. It takes a filename or resource ID and loads a primary game resource (e.g., a level or scene file). It then optionally loads two related variant resources (suffixed with _x and _z) and binds all of them to a newly created game object. This function serves as the central entry point for creating and initializing a major game entity based on external resource files. param_1 is likely the file name. Seems to be loading many assets?
+- `FUN_00475c60` **FindFileInCache**: This function attempts to retrieve a file from a pre-loaded cache. It takes a file identifier and other parameters as input. If the file is found in the cache, it allocates a small data structure, populates it with information about the cached file (like its memory address and size), and returns a pointer to this structure. If the file is not found, the function returns a 0
+- `FUN_00401c70` **SubsystemDeinitializer**: This function de-initializes a game subsystem. It first checks a flag to determine if the subsystem is active. If so, it calls multiple cleanup functions and frees memory before setting the active flag to zero. A final, generic cleanup routine is always executed.
+- `FUN_00537870` **QueueManagerAndTimerReset**:  This function manages the cleanup of a game's resource or event queue. It stops a game component, then processes and removes items from the queue. The cleanup method for each item depends on specific parameters. After clearing the queue, it resets a high-precision timer, with the timer value depending on the current game state, in preparation for the next phase.
 
 ### Classes
 - `0x009AA224`  **CSWGuiMainCharGen::vftable**: Seems to be the class for character creation
 - `0x0099C460`  **CResGFF::vftable**: Generic File Format (GFF) loader used to parse and provide access to resources like UTC, UTI, ARE, etc
 - `0x0098B5CC`  **Gob::vftable**: Base game object class used to represent in-world entities. Contains a wide range of virtual functions for lifecycle management, serialization, rendering, and asset loading.  
 
+### Code Paths
+- ProcessResourceQueue
+    - HandleBNPacket
+    - ResourcePacketDispatcher
+    - ResourceQueue_UnpackAndTrace
+        - SPacketHandler
+        - PPacektHandler
+            - ModuleHandler
+                - ModuleChunkLoadWrapperA
+                    - ModuleChunkLoadCore
+                        - InitializeGameUI
 
 ## Build Instructions
 Download [MinHook](https://github.com/TsudaKageyu/minhook)

@@ -99,11 +99,17 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_00475c60` **FindFileInCache**: This function attempts to retrieve a file from a pre-loaded cache. It takes a file identifier and other parameters as input. If the file is found in the cache, it allocates a small data structure, populates it with information about the cached file (like its memory address and size), and returns a pointer to this structure. If the file is not found, the function returns a 0
 - `FUN_00401c70` **SubsystemDeinitializer**: This function de-initializes a game subsystem. It first checks a flag to determine if the subsystem is active. If so, it calls multiple cleanup functions and frees memory before setting the active flag to zero. A final, generic cleanup routine is always executed.
 - `FUN_00537870` **QueueManagerAndTimerReset**:  This function manages the cleanup of a game's resource or event queue. It stops a game component, then processes and removes items from the queue. The cleanup method for each item depends on specific parameters. After clearing the queue, it resets a high-precision timer, with the timer value depending on the current game state, in preparation for the next phase.
+- `FUN_00410530` **GUI_Update3DSceneView**:  Initializes or updates the state of a 3D scene view GUI element. It handles rendering flags, increments the active view counter, and triggers the loading and rendering of 3D assets. It can either perform a full load for a new scene or a quick update for an existing one.
+- `FUN_0070ed50` **???**:  Something to do with audio? Would need to look into further but out of scope for now
+- `FUN_00410890` **FindObjectInList**:  Linear searches for an object within a list
+- `FUN_0083ea60` **ArrayAdd**:  Adds an element to an array and resizes it if it is too small
 
 ### Classes
 - `0x009AA224`  **CSWGuiMainCharGen::vftable**: Seems to be the class for character creation
 - `0x0099C460`  **CResGFF::vftable**: Generic File Format (GFF) loader used to parse and provide access to resources like UTC, UTI, ARE, etc
-- `0x0098B5CC`  **Gob::vftable**: Base game object class used to represent in-world entities. Contains a wide range of virtual functions for lifecycle management, serialization, rendering, and asset loading.  
+- `0x0098B5CC`  **Gob::vftable**: Base game object class used to represent in-world entities. Contains a wide range of virtual functions for lifecycle management, serialization, rendering, and asset loading. 
+- `0x009a7a74`  **CSWGuiInGameAreaTransition::vftable**: Gui for area transition display during loading screen
+
 
 ### Code Paths
 - ProcessResourceQueue

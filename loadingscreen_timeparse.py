@@ -53,7 +53,9 @@ def main():
         ("DebugMenuConstructor", re.compile(r'DebugMenuConstructor:\s*(\d+)\s*μs')),
         ("fopen", re.compile(r'fopen:\s*(\d+)\s*μs')),
         ("gobconstructor", re.compile(r'gobconstructor:\s*(\d+)\s*μs')),
-        ("areaconstructor", re.compile(r'areaconstructor:\s*(\d+)\s*μs'))
+        ("areaconstructor", re.compile(r'areaconstructor:\s*(\d+)\s*μs')),
+        ("InitializeGameUI", re.compile(r'InitializeGameUI:\s*(\d+)\s*μs')),
+        ("GUI_Update3DSceneView", re.compile(r'GUI_Update3DSceneView:\s*(\d+)\s*μs'))
     ]
 
     for name, p in patterns:

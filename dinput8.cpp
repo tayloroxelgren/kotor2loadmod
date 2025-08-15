@@ -119,7 +119,6 @@ ProcessResourceQueuePtr_t g_originalProcessResourceQueuePtr = nullptr;
 //     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 //     Log("ProcessResourceQueue: " + std::to_string(duration.count()) + " μs");
 // }
-
 void __fastcall Hook_ProcessResourceQueue(int param1, void*, int param2){
     auto start = std::chrono::high_resolution_clock::now();
 
@@ -410,6 +409,38 @@ void* __fastcall Hook_AreaConstructor(uint32_t* thisptr, void* edx,uint32_t para
     return result;
 }
 
+
+
+typedef void* (__fastcall* InitializeGameUIPtr_t)(void* param1,void* edxdummy,int param2);
+InitializeGameUIPtr_t g_originalInitializeGameUIPtr_t = nullptr;
+
+void* __fastcall Hook_InitializeGameUI(void* param1,void* edxdummy,int param2){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    void* result=g_originalInitializeGameUIPtr_t(param1,edxdummy,param2);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("InitializeGameUI: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+
+typedef void* (__fastcall* GUI_Update3DSceneViewPtr_t)(int param1,void* edxdummy,int* param2,unsigned int param3,int param4);
+GUI_Update3DSceneViewPtr_t g_originalGUI_Update3DSceneViewPtr_t = nullptr;
+
+void* __fastcall Hook_GUI_Update3DSceneView(int param1,void* edxdummy,int* param2,unsigned int param3,int param4){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    void* result=g_originalGUI_Update3DSceneViewPtr_t(param1,edxdummy,param2,param3,param4);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("GUI_Update3DSceneView: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+
 void InstallHook() {
     
     if (MH_Initialize() != MH_OK) {
@@ -435,54 +466,54 @@ void InstallHook() {
 
 
         
-    // void* targetAddr_LoadAndInitialize = (void*)(0x5582f0); //Just putting in actual address
-    // if (MH_CreateHook(targetAddr_LoadAndInitialize, &Hook_LoadAndInitializePtr, 
-    //     (LPVOID*)&g_originalLoadAndInitializePtr) == MH_OK) {
-    //         if (MH_EnableHook(targetAddr_LoadAndInitialize) == MH_OK) {
-    //             Log("LoadAndInitialize hook installed successfully");
-    //         } else {
-    //             Log("Failed to enable hook");
-    //         }
-    //     } else {
-    //         Log("Failed to create hook");
-    //     }
+    void* targetAddr_LoadAndInitialize = (void*)(0x5582f0); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_LoadAndInitialize, &Hook_LoadAndInitializePtr, 
+        (LPVOID*)&g_originalLoadAndInitializePtr) == MH_OK) {
+            if (MH_EnableHook(targetAddr_LoadAndInitialize) == MH_OK) {
+                Log("LoadAndInitialize hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
 
-    // void* targetAddr_ProcessResourceQueue = (void*)(0x703f30); //Just putting in actual address
-    // if (MH_CreateHook(targetAddr_ProcessResourceQueue, &Hook_ProcessResourceQueue, 
-    //     (LPVOID*)&g_originalProcessResourceQueuePtr) == MH_OK) {
-    //         if (MH_EnableHook(targetAddr_ProcessResourceQueue) == MH_OK) {
-    //             Log("ProcessResourceQueue hook installed successfully");
-    //         } else {
-    //             Log("Failed to enable hook");
-    //         }
-    //     } else {
-    //         Log("Failed to create hook");
-    //     }
+    void* targetAddr_ProcessResourceQueue = (void*)(0x703f30); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_ProcessResourceQueue, &Hook_ProcessResourceQueue, 
+        (LPVOID*)&g_originalProcessResourceQueuePtr) == MH_OK) {
+            if (MH_EnableHook(targetAddr_ProcessResourceQueue) == MH_OK) {
+                Log("ProcessResourceQueue hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
 
-    // void* targetAddr_HandleBNPacket = (void*)(0x704880); //Just putting in actual address
-    // if (MH_CreateHook(targetAddr_HandleBNPacket, &Hook_HandleBNPacket, 
-    //     (LPVOID*)&g_originalHandleBNPacketPtr) == MH_OK) {
-    //         if (MH_EnableHook(targetAddr_HandleBNPacket) == MH_OK) {
-    //             Log("HandleBNPacket hook installed successfully");
-    //         } else {
-    //             Log("Failed to enable hook");
-    //         }
-    //     } else {
-    //         Log("Failed to create hook");
-    //     }
+    void* targetAddr_HandleBNPacket = (void*)(0x704880); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_HandleBNPacket, &Hook_HandleBNPacket, 
+        (LPVOID*)&g_originalHandleBNPacketPtr) == MH_OK) {
+            if (MH_EnableHook(targetAddr_HandleBNPacket) == MH_OK) {
+                Log("HandleBNPacket hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
 
 
-    // void* targetAddr_InitShadowCache = (void*)(0x53a8b0); //Just putting in actual address
-    // if (MH_CreateHook(targetAddr_InitShadowCache, &Hook_InitShadowCache, 
-    //     (LPVOID*)&g_originalInitShadowCachePtr) == MH_OK) {
-    //         if (MH_EnableHook(targetAddr_InitShadowCache) == MH_OK) {
-    //             Log("InitShadowCache hook installed successfully");
-    //         } else {
-    //             Log("Failed to enable hook");
-    //         }
-    //     } else {
-    //         Log("Failed to create hook");
-    //     }
+    void* targetAddr_InitShadowCache = (void*)(0x53a8b0); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_InitShadowCache, &Hook_InitShadowCache, 
+        (LPVOID*)&g_originalInitShadowCachePtr) == MH_OK) {
+            if (MH_EnableHook(targetAddr_InitShadowCache) == MH_OK) {
+                Log("InitShadowCache hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
 
     // void* targetAddr_LoadResourceBlockOrFallback = (void*)(0x718e40); //Just putting in actual address
     // if (MH_CreateHook(targetAddr_LoadResourceBlockOrFallback, &Hook_LoadResourceBlockOrFallback, 
@@ -510,152 +541,152 @@ void InstallHook() {
         }
 
 
-    // void* targetAddr_FlushTracer = (void*)(0x733780); //Just putting in actual address
-    // if (MH_CreateHook(targetAddr_FlushTracer, &Hook_FlushTracer, 
-    //     (LPVOID*)&g_originalFlushTracerPtr) == MH_OK) {
-    //         if (MH_EnableHook(targetAddr_FlushTracer) == MH_OK) {
-    //             Log("FlushTracer hook installed successfully");
-    //         } else {
-    //             Log("Failed to enable hook");
-    //         }
-    //     } else {
-    //         Log("Failed to create hook");
-    //     }
+    void* targetAddr_FlushTracer = (void*)(0x733780); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_FlushTracer, &Hook_FlushTracer, 
+        (LPVOID*)&g_originalFlushTracerPtr) == MH_OK) {
+            if (MH_EnableHook(targetAddr_FlushTracer) == MH_OK) {
+                Log("FlushTracer hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
 
-    // void* targetAddr_ResourcePacketDispatcher = (void*)(0x5314e0); //Just putting in actual address
-    // if (MH_CreateHook(targetAddr_ResourcePacketDispatcher, &Hook_ResourcePacketDispatcher, 
-    //     (LPVOID*)&g_originalResourcePacketPtr) == MH_OK) {
-    //         if (MH_EnableHook(targetAddr_ResourcePacketDispatcher) == MH_OK) {
-    //             Log("ResourcePacketDispatcher hook installed successfully");
-    //         } else {
-    //             Log("Failed to enable hook");
-    //         }
-    //     } else {
-    //         Log("Failed to create hook");
-    //     }
+    void* targetAddr_ResourcePacketDispatcher = (void*)(0x5314e0); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_ResourcePacketDispatcher, &Hook_ResourcePacketDispatcher, 
+        (LPVOID*)&g_originalResourcePacketPtr) == MH_OK) {
+            if (MH_EnableHook(targetAddr_ResourcePacketDispatcher) == MH_OK) {
+                Log("ResourcePacketDispatcher hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
 
-    // void* targetAddr_ResourceQueue_UnpackAndTrace = (void*)(0x781840); //Just putting in actual address
-    // if (MH_CreateHook(targetAddr_ResourceQueue_UnpackAndTrace, &Hook_ResourceQueue_UnpackAndTrace, 
-    //     (LPVOID*)&g_originalResourceQueue_UnpackAndTracePtr) == MH_OK) {
-    //         if (MH_EnableHook(targetAddr_ResourceQueue_UnpackAndTrace) == MH_OK) {
-    //             Log("ResourceQueue_UnpackAndTrace hook installed successfully");
-    //         } else {
-    //             Log("Failed to enable hook");
-    //         }
-    //     } else {
-    //         Log("Failed to create hook");
-    //     }
-
-
-    // void* targetAddr_PpacketHandler = (void*)(0x810cf0); //Just putting in actual address
-    // if (MH_CreateHook(targetAddr_PpacketHandler, &Hook_PpacketHandler, 
-    //     (LPVOID*)&g_originalPpacketHandler) == MH_OK) {
-    //         if (MH_EnableHook(targetAddr_PpacketHandler) == MH_OK) {
-    //             Log("PpacketHandler hook installed successfully");
-    //         } else {
-    //             Log("Failed to enable hook");
-    //         }
-    //     } else {
-    //         Log("Failed to create hook");
-    //     }
+    void* targetAddr_ResourceQueue_UnpackAndTrace = (void*)(0x781840); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_ResourceQueue_UnpackAndTrace, &Hook_ResourceQueue_UnpackAndTrace, 
+        (LPVOID*)&g_originalResourceQueue_UnpackAndTracePtr) == MH_OK) {
+            if (MH_EnableHook(targetAddr_ResourceQueue_UnpackAndTrace) == MH_OK) {
+                Log("ResourceQueue_UnpackAndTrace hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
 
 
-    // void* targetAddr_SpacketHandler = (void*)(0x884530); //Just putting in actual address
-    // if (MH_CreateHook(targetAddr_SpacketHandler, &Hook_SpacketHandler, 
-    //     (LPVOID*)&g_originalSpacketHandler) == MH_OK) {
-    //         if (MH_EnableHook(targetAddr_SpacketHandler) == MH_OK) {
-    //             Log("PpacketHandler hook installed successfully");
-    //         } else {
-    //             Log("Failed to enable hook");
-    //         }
-    //     } else {
-    //         Log("Failed to create hook");
-    //     }
+    void* targetAddr_PpacketHandler = (void*)(0x810cf0); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_PpacketHandler, &Hook_PpacketHandler, 
+        (LPVOID*)&g_originalPpacketHandler) == MH_OK) {
+            if (MH_EnableHook(targetAddr_PpacketHandler) == MH_OK) {
+                Log("PpacketHandler hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
 
 
-    // void* targetAddr_ModuleHandler = (void*)(0x811450); //Just putting in actual address
-    // if (MH_CreateHook(targetAddr_ModuleHandler, &Hook_ModuleHandler, 
-    //     (LPVOID*)&g_originalModuleHandler) == MH_OK) {
-    //         if (MH_EnableHook(targetAddr_ModuleHandler) == MH_OK) {
-    //             Log("ModuleHandler hook installed successfully");
-    //         } else {
-    //             Log("Failed to enable hook");
-    //         }
-    //     } else {
-    //         Log("Failed to create hook");
-    //     }
+    void* targetAddr_SpacketHandler = (void*)(0x884530); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_SpacketHandler, &Hook_SpacketHandler, 
+        (LPVOID*)&g_originalSpacketHandler) == MH_OK) {
+            if (MH_EnableHook(targetAddr_SpacketHandler) == MH_OK) {
+                Log("PpacketHandler hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
 
-    // void* targetAddr_GameObjUpdate = (void*)(0x80deb0); //Just putting in actual address
-    // if (MH_CreateHook(targetAddr_GameObjUpdate, &Hook_GameObjUpdate, 
-    //     (LPVOID*)&g_originalGameObjUpdate) == MH_OK) {
-    //         if (MH_EnableHook(targetAddr_GameObjUpdate) == MH_OK) {
-    //             Log("GameObjUpdate hook installed successfully");
-    //         } else {
-    //             Log("Failed to enable hook");
-    //         }
-    //     } else {
-    //         Log("Failed to create hook");
-    //     }
 
-    // void* targetAddr_ModuleChunkLoadCore = (void*)(0x7BE4C0); //Just putting in actual address
-    // if (MH_CreateHook(targetAddr_ModuleChunkLoadCore, &Hook_ModuleChunkLoadCore, 
-    //     (LPVOID*)&g_originalModuleChunkLoadCore) == MH_OK) {
-    //         if (MH_EnableHook(targetAddr_ModuleChunkLoadCore) == MH_OK) {
-    //             Log("ModuleChunkLoadCore hook installed successfully");
-    //         } else {
-    //             Log("Failed to enable hook");
-    //         }
-    //     } else {
-    //         Log("Failed to create hook");
-    //     }
+    void* targetAddr_ModuleHandler = (void*)(0x811450); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_ModuleHandler, &Hook_ModuleHandler, 
+        (LPVOID*)&g_originalModuleHandler) == MH_OK) {
+            if (MH_EnableHook(targetAddr_ModuleHandler) == MH_OK) {
+                Log("ModuleHandler hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
 
-    // void* targetAddr_LoadingScreenUpdateFrame = (void*)(0x409ed0); //Just putting in actual address
-    // if (MH_CreateHook(targetAddr_LoadingScreenUpdateFrame, &Hook_LoadingScreenUpdateFrame, 
-    //     (LPVOID*)&g_originalLoadingScreenUpdateFrame) == MH_OK) {
-    //         if (MH_EnableHook(targetAddr_LoadingScreenUpdateFrame) == MH_OK) {
-    //             Log("LoadingScreenUpdateFrame hook installed successfully");
-    //         } else {
-    //             Log("Failed to enable hook");
-    //         }
-    //     } else {
-    //         Log("Failed to create hook");
-    //     }
+    void* targetAddr_GameObjUpdate = (void*)(0x80deb0); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_GameObjUpdate, &Hook_GameObjUpdate, 
+        (LPVOID*)&g_originalGameObjUpdate) == MH_OK) {
+            if (MH_EnableHook(targetAddr_GameObjUpdate) == MH_OK) {
+                Log("GameObjUpdate hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
 
-    // void* targetAddr_ConfigParse = (void*)(0x4763b0);
-    // if (MH_CreateHook(targetAddr_ConfigParse, &Hook_ConfigParse, 
-    //     (LPVOID*)&g_originalConfigParse) == MH_OK) {
-    //         if (MH_EnableHook(targetAddr_ConfigParse) == MH_OK) {
-    //             Log("ConfigParse hook installed successfully");
-    //         } else {
-    //             Log("Failed to enable hook");
-    //         }
-    //     } else {
-    //         Log("Failed to create hook");
-    //     }
+    void* targetAddr_ModuleChunkLoadCore = (void*)(0x7BE4C0); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_ModuleChunkLoadCore, &Hook_ModuleChunkLoadCore, 
+        (LPVOID*)&g_originalModuleChunkLoadCore) == MH_OK) {
+            if (MH_EnableHook(targetAddr_ModuleChunkLoadCore) == MH_OK) {
+                Log("ModuleChunkLoadCore hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
 
-    // void* targetAddr_LevelLoaderAndInitializer = (void*)(0x462320);
-    // if (MH_CreateHook(targetAddr_LevelLoaderAndInitializer, &Hook_LevelLoaderAndInitializer, 
-    //     (LPVOID*)&g_originalLevelLoaderAndInitializer) == MH_OK) {
-    //         if (MH_EnableHook(targetAddr_LevelLoaderAndInitializer) == MH_OK) {
-    //             Log("LevelLoaderAndInitializer hook installed successfully");
-    //         } else {
-    //             Log("Failed to enable hook");
-    //         }
-    //     } else {
-    //         Log("Failed to create hook");
-    //     }
+    void* targetAddr_LoadingScreenUpdateFrame = (void*)(0x409ed0); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_LoadingScreenUpdateFrame, &Hook_LoadingScreenUpdateFrame, 
+        (LPVOID*)&g_originalLoadingScreenUpdateFrame) == MH_OK) {
+            if (MH_EnableHook(targetAddr_LoadingScreenUpdateFrame) == MH_OK) {
+                Log("LoadingScreenUpdateFrame hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
 
-    // void* targetAddr_DebugMenuConstructor = (void*)(0x8C19F0);
-    // if (MH_CreateHook(targetAddr_DebugMenuConstructor, &Hook_DebugMenuConstructor, 
-    //     (LPVOID*)&g_originalDebugMenuConstructor) == MH_OK) {
-    //         if (MH_EnableHook(targetAddr_DebugMenuConstructor) == MH_OK) {
-    //             Log("DebugMenuConstructor hook installed successfully");
-    //         } else {
-    //             Log("Failed to enable hook");
-    //         }
-    //     } else {
-    //         Log("Failed to create hook");
-    //     }
+    void* targetAddr_ConfigParse = (void*)(0x4763b0);
+    if (MH_CreateHook(targetAddr_ConfigParse, &Hook_ConfigParse, 
+        (LPVOID*)&g_originalConfigParse) == MH_OK) {
+            if (MH_EnableHook(targetAddr_ConfigParse) == MH_OK) {
+                Log("ConfigParse hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_LevelLoaderAndInitializer = (void*)(0x462320);
+    if (MH_CreateHook(targetAddr_LevelLoaderAndInitializer, &Hook_LevelLoaderAndInitializer, 
+        (LPVOID*)&g_originalLevelLoaderAndInitializer) == MH_OK) {
+            if (MH_EnableHook(targetAddr_LevelLoaderAndInitializer) == MH_OK) {
+                Log("LevelLoaderAndInitializer hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_DebugMenuConstructor = (void*)(0x8C19F0);
+    if (MH_CreateHook(targetAddr_DebugMenuConstructor, &Hook_DebugMenuConstructor, 
+        (LPVOID*)&g_originalDebugMenuConstructor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_DebugMenuConstructor) == MH_OK) {
+                Log("DebugMenuConstructor hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
 
     void* targetAddr_fopen = (void*)(0x91caeb);
     if (MH_CreateHook(targetAddr_fopen, &Hook_fopen, 
@@ -686,6 +717,31 @@ void InstallHook() {
         (LPVOID*)&g_originalAreaConstructor) == MH_OK) {
             if (MH_EnableHook(targetAddr_AreaConstructor) == MH_OK) {
                 Log("AreaConstructor hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_InitializeGameUI = (void*)(0x747210);
+    if (MH_CreateHook(targetAddr_InitializeGameUI, &Hook_InitializeGameUI, 
+        (LPVOID*)&g_originalInitializeGameUIPtr_t) == MH_OK) {
+            if (MH_EnableHook(targetAddr_InitializeGameUI) == MH_OK) {
+                Log("InitializeGameUI hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+
+    void* targetAddr_GUI_Update3DSceneViewPtr_t = (void*)(0x410530);
+    if (MH_CreateHook(targetAddr_GUI_Update3DSceneViewPtr_t, &Hook_GUI_Update3DSceneView, 
+        (LPVOID*)&g_originalGUI_Update3DSceneViewPtr_t) == MH_OK) {
+            if (MH_EnableHook(targetAddr_GUI_Update3DSceneViewPtr_t) == MH_OK) {
+                Log("GUI_Update3DSceneView hook installed successfully");
             } else {
                 Log("Failed to enable hook");
             }

@@ -373,7 +373,7 @@ DebugMenuContructorPtr_t g_originalDebugMenuConstructor=nullptr;
 uint32_t* __cdecl Hook_DebugMenuConstructor(uint32_t param1){
         auto start = std::chrono::high_resolution_clock::now();
     
-    // uint32_t* result =g_originalDebugMenuConstructor(param1);
+    uint32_t* result =g_originalDebugMenuConstructor(param1);
     
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -438,6 +438,33 @@ void* __fastcall Hook_GUI_Update3DSceneView(int param1,void* edxdummy,int* param
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     Log("GUI_Update3DSceneView: " + std::to_string(duration.count()) + " μs");
     return result;
+}
+
+// typedef int (__cdecl* AllocateMemoryOrThrowPtr_t)(size_t param_1);
+// AllocateMemoryOrThrowPtr_t g_originalAllocateMemoryOrThrow = nullptr;
+
+// int __cdecl Hook_AllocateMemoryOrThrow(size_t param_1){
+//     auto start = std::chrono::high_resolution_clock::now();
+
+//     int result=g_originalAllocateMemoryOrThrow(param_1);
+
+//     auto end = std::chrono::high_resolution_clock::now();
+//     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+//     Log("AllocateMemoryOrThrow: " + std::to_string(duration.count()) + " μs");
+//     return result;
+// }
+
+typedef void (__cdecl* ModuleDirectoryScannerPtr_t)(int param_1,uint32_t param_2,uint32_t param_3,int param_4,int param_5);
+ModuleDirectoryScannerPtr_t g_originalModuleDirectoryScanner = nullptr;
+
+void __cdecl Hook_ModuleDirectoryScanner(int param_1,uint32_t param_2,uint32_t param_3,int param_4,int param_5){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalModuleDirectoryScanner(param_1,param_2,param_3,param_4,param_5);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("ModuleDirectoryScanner: " + std::to_string(duration.count()) + " μs");
 }
 
 
@@ -515,17 +542,17 @@ void InstallHook() {
             Log("Failed to create hook");
         }
 
-    // void* targetAddr_LoadResourceBlockOrFallback = (void*)(0x718e40); //Just putting in actual address
-    // if (MH_CreateHook(targetAddr_LoadResourceBlockOrFallback, &Hook_LoadResourceBlockOrFallback, 
-    //     (LPVOID*)&g_originalLoadResourceBlockOrFallbackPtr) == MH_OK) {
-    //         if (MH_EnableHook(targetAddr_LoadResourceBlockOrFallback) == MH_OK) {
-    //             Log("LoadResourceBlockOrFallback hook installed successfully");
-    //         } else {
-    //             Log("Failed to enable hook");
-    //         }
-    //     } else {
-    //         Log("Failed to create hook");
-    //     }
+    void* targetAddr_LoadResourceBlockOrFallback = (void*)(0x718e40); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_LoadResourceBlockOrFallback, &Hook_LoadResourceBlockOrFallback, 
+        (LPVOID*)&g_originalLoadResourceBlockOrFallbackPtr) == MH_OK) {
+            if (MH_EnableHook(targetAddr_LoadResourceBlockOrFallback) == MH_OK) {
+                Log("LoadResourceBlockOrFallback hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
 
 
     void* targetAddr_PreloadInitialAssetsWrapper = (void*)(0x73f050); //Just putting in actual address
@@ -748,7 +775,30 @@ void InstallHook() {
         } else {
             Log("Failed to create hook");
         }
-
+        
+        // void* targetAddr_AllocateMemoryOrThrow = (void*)(0x919723);
+        // if (MH_CreateHook(targetAddr_AllocateMemoryOrThrow, &Hook_AllocateMemoryOrThrow, 
+        //     (LPVOID*)&g_originalAllocateMemoryOrThrow) == MH_OK) {
+            //         if (MH_EnableHook(targetAddr_AllocateMemoryOrThrow) == MH_OK) {
+                //             Log("AllocateMemoryOrThrow hook installed successfully");
+                //         } else {
+                    //             Log("Failed to enable hook");
+                    //         }
+                    //     } else {
+                        //         Log("Failed to create hook");
+                        //     }
+                        
+    void* targetAddr_ModuleDirectoryScanner = (void*)(0x410530);
+    if (MH_CreateHook(targetAddr_ModuleDirectoryScanner, &Hook_ModuleDirectoryScanner, 
+        (LPVOID*)&g_originalModuleDirectoryScanner) == MH_OK) {
+            if (MH_EnableHook(targetAddr_ModuleDirectoryScanner) == MH_OK) {
+                Log("ModuleDirectoryScanner hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
 
 
 }

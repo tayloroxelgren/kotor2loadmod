@@ -103,6 +103,7 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_0070ed50` **???**:  Something to do with audio? Would need to look into further but out of scope for now
 - `FUN_00410890` **FindObjectInList**:  Linear searches for an object within a list
 - `FUN_0083ea60` **ArrayAdd**:  Adds an element to an array and resizes it if it is too small
+- `FUN_00737540` **ModuleDirectoryScanner**:  Walks through the file system and for each file in a directory does something
 
 ### Classes
 - `0x009AA224`  **CSWGuiMainCharGen::vftable**: Seems to be the class for character creation

@@ -55,7 +55,9 @@ def main():
         ("gobconstructor", re.compile(r'gobconstructor:\s*(\d+)\s*μs')),
         ("areaconstructor", re.compile(r'areaconstructor:\s*(\d+)\s*μs')),
         ("InitializeGameUI", re.compile(r'InitializeGameUI:\s*(\d+)\s*μs')),
-        ("GUI_Update3DSceneView", re.compile(r'GUI_Update3DSceneView:\s*(\d+)\s*μs'))
+        ("GUI_Update3DSceneView", re.compile(r'GUI_Update3DSceneView:\s*(\d+)\s*μs')),
+        ("AllocateMemoryOrThrow", re.compile(r'AllocateMemoryOrThrow:\s*(\d+)\s*μs')),
+        ("ModuleDirectoryScanner", re.compile(r'ModuleDirectoryScanner:\s*(\d+)\s*μs'))
     ]
 
     for name, p in patterns:

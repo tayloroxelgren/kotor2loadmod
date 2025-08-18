@@ -7,6 +7,7 @@
 #include <mutex>
 #include <unordered_set>
 #include <atomic>
+#include <Windows.h>
 
 // DirectInput8 proxy
 typedef HRESULT(WINAPI *DICREATE)(HINSTANCE, DWORD, REFIID, LPVOID*, LPUNKNOWN);
@@ -241,11 +242,12 @@ PpacketHandlerPtr_t g_originalPpacketHandler= nullptr;
 uint32_t __cdecl Hook_PpacketHandler(char *param1,int param2){
     auto start = std::chrono::high_resolution_clock::now();
 
-    g_originalPpacketHandler(param1,param2);
+    uint32_t result=g_originalPpacketHandler(param1,param2);
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     Log("PpacketHandler: " + std::to_string(duration.count()) + " μs");
+    return result;
 }
 
 typedef uint32_t (__cdecl* SpacketHandlerPtr_t)(char *param1,int param2);
@@ -254,11 +256,12 @@ SpacketHandlerPtr_t g_originalSpacketHandler= nullptr;
 uint32_t __cdecl Hook_SpacketHandler(char *param1,int param2){
     auto start = std::chrono::high_resolution_clock::now();
 
-    g_originalSpacketHandler(param1,param2);
+    uint32_t result=g_originalSpacketHandler(param1,param2);
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     Log("SpacketHandler: " + std::to_string(duration.count()) + " μs");
+    return result;
 }
 
 typedef uint32_t (__cdecl* ModuleHandlerPtr_t)(byte param1);
@@ -267,11 +270,13 @@ ModuleHandlerPtr_t g_originalModuleHandler=nullptr;
 uint32_t __cdecl Hook_ModuleHandler(byte param1){
     auto start = std::chrono::high_resolution_clock::now();
 
-    g_originalModuleHandler(param1);
+    uint32_t result=g_originalModuleHandler(param1);
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     Log("ModuleHandler: " + std::to_string(duration.count()) + " μs");
+    
+    return result;
 }
 
 typedef uint32_t (__cdecl* GameObjUpdatePtr_t)(byte param1);
@@ -280,11 +285,12 @@ GameObjUpdatePtr_t g_originalGameObjUpdate=nullptr;
 uint32_t __cdecl Hook_GameObjUpdate(byte param1){
     auto start = std::chrono::high_resolution_clock::now();
 
-    g_originalGameObjUpdate(param1);
+    uint32_t result=g_originalGameObjUpdate(param1);
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     Log("GameObjUpdate: " + std::to_string(duration.count()) + " μs");
+    return result;
 }
 
 

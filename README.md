@@ -69,7 +69,7 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_0051eed0` **LoadEventQueueFromConfig**: Iterates the "EventQueue" section, allocates and initializes event nodes from each entry, enqueuing successful ones and freeing failures.
 - `FUN_005205f0` **BuildEventFromConfigEntry**: Reads one "EventQueue" entry, fills common fields (tag/ids), and deserializes a typed "EventData" payload based on EventId (allocating and constructing the appropriate struct). Returns 1 on success, 0 for invalid EventId
 - `FUN_00423AB0` **ParseTXIAndBuildTextureController**: “Parses TXI directives for a texture: creates the appropriate procedural texture controller from proceduretype and applies all TXI flags/params (mipmaps, clamp, bump, envmap, etc.). Finally lets the controller parse its own extra options.”
-- `FUN_00423000` **CAurTextureBasic::Ctor**: Constructs a texture object, sets defaults, stores names, allocates helper state
+- `FUN_00423000` **CAurTextureBasic::Ctor**: Constructs a texture object, sets defaults, stores names, allocates helper state. 
 - `FUN_00424B10` **Texture_ApplyTXIAndBuildController**: Constructs a texture object, sets defaults, stores names, allocates helper state
 - `FUN_00704060` **NetLayer::SendMessageToPlayer**: Writes a message into the player’s outgoing network buffer. Validates available space to avoid overflow (logging a detailed dump if it would exceed the buffer), copies the message length and payload into the queue, and advances the write pointer. This is what sends packets to ProcessResourceQueue
 - `FUN_00665280` **SendMessageWithSHeader**: This function constructs and sends a network message prefixed with the byte `0x53` to a specific player. It allocates a buffer, copies data from a source function (`FUN_00734010`), and sends it using `NetLayer::SendMessageToPlayer`.
@@ -88,6 +88,7 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_00711360` **ResourceStreamer_Init**: This function initializes the resource streaming system. It determines available physical memory to size streaming buffers and launches a dedicated worker thread to handle the loading of game assets from storage into memory.
 - `FUN_005363a0` **SubsystemManager_Init**: This function is a core initializer that sets up the game's key subsystems. It allocates memory and constructs various manager objects, including those for a message queue, resource queues, and an in-game virtual machine for scripts. It also establishes file paths for different game directories and logs each step of the initialization process for debugging.
 - `FUN_00788d90` **GameClient_Init**: This function performs the comprehensive setup for the game's client-side environment. It reads settings from the swkotor2.ini file to configure graphics options like "FullScreen" and "Texture Quality." It also initializes core game objects, loads localization data, and sets up various other subsystems needed to run the game, such as the resource streamer and other game-specific managers.
+- `FUN_0073fad0` **GameClient_Init_Wrapper**: Wrapper function for GameClient_Init
 - `FUN_00401bc0` **LoadingScreenManager_Init**: This function initializes the loading screen manager. It first checks if a previous manager exists and cleans it up. It then allocates and initializes a new manager object, preparing the game to display and manage loading screens.
 - `FUN_00882230` **ModuleLoader**: This function is a core module and resource loader, primarily used when transitioning between different game areas or beginning a new game. It first sets up the necessary file system paths for game resources and then allocates memory for and initializes the main module object. It performs low-level file I/O to load various resources and also uses a tracing system to log its progress. This function is an integral part of the loading sequence, working with the loading screen manager to ensure a smooth transition into the game world.
 - `FUN_00880740` **MainMenu_Init**: This function is the constructor for the game's main menu. It initializes the UI, loads the main menu's visual resources, and checks for the existence of game files like GAMEINPROGRESS to enable or disable menu options. It also registers several event handlers, including one for the ModuleLoader, which allows clicking "New Game" or "Load Game" to start the game's loading process. It can also set up a 3D scene for the main menu's background, depending on the game's state.
@@ -103,13 +104,20 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_0070ed50` **???**:  Something to do with audio? Would need to look into further but out of scope for now
 - `FUN_00410890` **FindObjectInList**:  Linear searches for an object within a list
 - `FUN_0083ea60` **ArrayAdd**:  Adds an element to an array and resizes it if it is too small
+- `FUN_00423860` **SortedInsertTexture**:  Inserts a sorted texture into an array
+- `FUN_00427810` **TexturePoolCleanupAndRefresh**:  Cleanup and initialization routine for a texture or resource pool
 - `FUN_00737540` **ModuleDirectoryScanner**:  Walks through the file system and for each file in a directory does something
+- `FUN_006310d0` **LoadGame**:  Loads a save game
+- `FUN_005308b0` **GameSaveLoadManager**:  central save/load system dispatcher for the game. It uses a single-byte parameter to determine which action to perform
+- `FUN_00711750 ` **ResourceLoader**:  Main function that loads resources
+- `FUN_00711690 ` **ResourceLoaderWrapper**:  Wrapper for resource loader
 
 ### Classes
 - `0x009AA224`  **CSWGuiMainCharGen::vftable**: Seems to be the class for character creation
 - `0x0099C460`  **CResGFF::vftable**: Generic File Format (GFF) loader used to parse and provide access to resources like UTC, UTI, ARE, etc
 - `0x0098B5CC`  **Gob::vftable**: Base game object class used to represent in-world entities. Contains a wide range of virtual functions for lifecycle management, serialization, rendering, and asset loading. 
 - `0x009a7a74`  **CSWGuiInGameAreaTransition::vftable**: Gui for area transition display during loading screen
+- `0x0099493c`  **CSWSModule::vftable::vftable**: Module class
 
 
 ### Code Paths

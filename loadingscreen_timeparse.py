@@ -57,7 +57,8 @@ def main():
         ("InitializeGameUI", re.compile(r'InitializeGameUI:\s*(\d+)\s*μs')),
         ("GUI_Update3DSceneView", re.compile(r'GUI_Update3DSceneView:\s*(\d+)\s*μs')),
         ("AllocateMemoryOrThrow", re.compile(r'AllocateMemoryOrThrow:\s*(\d+)\s*μs')),
-        ("ModuleDirectoryScanner", re.compile(r'ModuleDirectoryScanner:\s*(\d+)\s*μs'))
+        ("ModuleDirectoryScanner", re.compile(r'ModuleDirectoryScanner:\s*(\d+)\s*μs')),
+        ("ArrayAdd", re.compile(r'ArrayAdd:\s*(\d+)\s*μs'))
     ]
 
     for name, p in patterns:

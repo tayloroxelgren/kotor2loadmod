@@ -467,6 +467,19 @@ void __cdecl Hook_ModuleDirectoryScanner(int param_1,uint32_t param_2,uint32_t p
     Log("ModuleDirectoryScanner: " + std::to_string(duration.count()) + " μs");
 }
 
+typedef void (__fastcall* ArrayAddPtr_t)(int* param1,void* edxdummy,uint32_t param2);
+ArrayAddPtr_t g_originalArrayAdd = nullptr;
+
+void __fastcall Hook_ArrayAdd(int* param1,void* edxdummy,uint32_t param2){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalArrayAdd(param1,edxdummy,param2);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("ArrayAdd: " + std::to_string(duration.count()) + " μs");
+}
+
 
 void InstallHook() {
     
@@ -788,11 +801,23 @@ void InstallHook() {
                         //         Log("Failed to create hook");
                         //     }
                         
-    void* targetAddr_ModuleDirectoryScanner = (void*)(0x410530);
+    void* targetAddr_ModuleDirectoryScanner = (void*)(0x737540);
     if (MH_CreateHook(targetAddr_ModuleDirectoryScanner, &Hook_ModuleDirectoryScanner, 
         (LPVOID*)&g_originalModuleDirectoryScanner) == MH_OK) {
             if (MH_EnableHook(targetAddr_ModuleDirectoryScanner) == MH_OK) {
                 Log("ModuleDirectoryScanner hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_ArrayAdd = (void*)(0x83ea60);
+    if (MH_CreateHook(targetAddr_ArrayAdd, &Hook_ArrayAdd, 
+        (LPVOID*)&g_originalArrayAdd) == MH_OK) {
+            if (MH_EnableHook(targetAddr_ArrayAdd) == MH_OK) {
+                Log("ArrayAdd hook installed successfully");
             } else {
                 Log("Failed to enable hook");
             }

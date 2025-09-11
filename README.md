@@ -111,6 +111,8 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_005308b0` **GameSaveLoadManager**:  central save/load system dispatcher for the game. It uses a single-byte parameter to determine which action to perform
 - `FUN_00711750 ` **ResourceLoader**:  Main function that loads resources
 - `FUN_00711690 ` **ResourceLoaderWrapper**:  Wrapper for resource loader
+- `FUN_0040fe60 ` **SetResourceStateAndTriggerUpdate**: Toggles a state flag for a resource and, if the flag is enabled, triggers a batch update and logging process.
+- `FUN_00411170 ` **UpdateObjectCollectionsAndTrace**:  Iterates through collections of objects, updates their state, and logs the process
 
 ### Classes
 - `0x009AA224`  **CSWGuiMainCharGen::vftable**: Seems to be the class for character creation

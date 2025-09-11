@@ -1,92 +1,121 @@
 === loadingscreen ===
-Total time:   2276375 μs (2276.38 ms)
-Average time: 781.45 μs (0.78 ms) over 2913 samples
-Std deviation: 1481.01 μs (1.48 ms)
+Total time:   2964007 μs (2964.01 ms)
+Average time: 1212.27 μs (1.21 ms) over 2445 samples
+Std deviation: 8613.65 μs (8.61 ms)
 
 === LoadAndInitialize ===
-Total time:   1472 μs (1.47 ms)
-Average time: 736.00 μs (0.74 ms) over 2 samples
-Std deviation: 48.08 μs (0.05 ms)
+Total time:   14771 μs (14.77 ms)
+Average time: 7385.50 μs (7.39 ms) over 2 samples
+Std deviation: 71.42 μs (0.07 ms)
 
 === ProcessResourceQueue ===
-Total time:   1192510 μs (1192.51 ms)
-Average time: 193.68 μs (0.19 ms) over 6157 samples
-Std deviation: 6135.16 μs (6.14 ms)
+Total time:   2841907 μs (2841.91 ms)
+Average time: 543.59 μs (0.54 ms) over 5228 samples
+Std deviation: 17134.94 μs (17.13 ms)
 
 === InitShadowCache ===
-Total time:   781 μs (0.78 ms)
-Average time: 0.27 μs (0.00 ms) over 2907 samples
-Std deviation: 0.45 μs (0.00 ms)
+Total time:   741 μs (0.74 ms)
+Average time: 0.30 μs (0.00 ms) over 2439 samples
+Std deviation: 0.47 μs (0.00 ms)
 
-Function data not found for: LoadResourceBlockOrFallback
+=== LoadResourceBlockOrFallback ===
+Total time:   23 μs (0.02 ms)
+Average time: 0.00 μs (0.00 ms) over 12083 samples
+Std deviation: 0.08 μs (0.00 ms)
+
 === HandleBNPacket ===
-Total time:   39 μs (0.04 ms)
-Average time: 19.50 μs (0.02 ms) over 2 samples
-Std deviation: 27.58 μs (0.03 ms)
+Total time:   440 μs (0.44 ms)
+Average time: 220.00 μs (0.22 ms) over 2 samples
+Std deviation: 311.13 μs (0.31 ms)
 
-Function data not found for: FlushTracer
+=== FlushTracer ===
+Total time:   240 μs (0.24 ms)
+Average time: 0.00 μs (0.00 ms) over 650205 samples
+Std deviation: 0.07 μs (0.00 ms)
+
 Function data not found for: Elsefunction
 === ResourcePacketDispatcher ===
-Total time:   18918 μs (18.92 ms)
-Average time: 1051.00 μs (1.05 ms) over 18 samples
-Std deviation: 2900.24 μs (2.90 ms)
+Total time:   199228 μs (199.23 ms)
+Average time: 12451.75 μs (12.45 ms) over 16 samples
+Std deviation: 39104.19 μs (39.10 ms)
 
 === ResourceQueue_UnpackAndTrace ===
-Total time:   1168835 μs (1168.84 ms)
-Average time: 7444.81 μs (7.44 ms) over 157 samples
-Std deviation: 36338.65 μs (36.34 ms)
+Total time:   2640893 μs (2640.89 ms)
+Average time: 20794.43 μs (20.79 ms) over 127 samples
+Std deviation: 106345.16 μs (106.35 ms)
 
 === PpacketHandler ===
-Total time:   1167459 μs (1167.46 ms)
-Average time: 8584.26 μs (8.58 ms) over 136 samples
-Std deviation: 38935.52 μs (38.94 ms)
+Total time:   2639367 μs (2639.37 ms)
+Average time: 21634.16 μs (21.63 ms) over 122 samples
+Std deviation: 108434.97 μs (108.43 ms)
 
 === SpacketHandler ===
-Total time:   13 μs (0.01 ms)
-Average time: 2.60 μs (0.00 ms) over 5 samples
-Std deviation: 0.89 μs (0.00 ms)
+Total time:   392 μs (0.39 ms)
+Average time: 78.40 μs (0.08 ms) over 5 samples
+Std deviation: 19.65 μs (0.02 ms)
 
 === ModuleHandler ===
-Total time:   717035 μs (717.03 ms)
-Average time: 119505.83 μs (119.51 ms) over 6 samples
-Std deviation: 138413.58 μs (138.41 ms)
+Total time:   1962441 μs (1962.44 ms)
+Average time: 327073.50 μs (327.07 ms) over 6 samples
+Std deviation: 392951.58 μs (392.95 ms)
 
 === ModuleChunkLoadCore ===
-Total time:   576228 μs (576.23 ms)
-Average time: 288114.00 μs (288.11 ms) over 2 samples
-Std deviation: 48428.33 μs (48.43 ms)
+Total time:   1639511 μs (1639.51 ms)
+Average time: 819755.50 μs (819.76 ms) over 2 samples
+Std deviation: 55238.47 μs (55.24 ms)
 
 === LoadingScreenUpdateFrame ===
-Total time:   760682 μs (760.68 ms)
-Average time: 10008.97 μs (10.01 ms) over 76 samples
-Std deviation: 30132.83 μs (30.13 ms)
+Total time:   730969 μs (730.97 ms)
+Average time: 9618.01 μs (9.62 ms) over 76 samples
+Std deviation: 27056.85 μs (27.06 ms)
 
 === GameObjUpdate ===
-Total time:   198025 μs (198.03 ms)
-Average time: 2084.47 μs (2.08 ms) over 95 samples
-Std deviation: 5106.43 μs (5.11 ms)
+Total time:   330174 μs (330.17 ms)
+Average time: 4076.22 μs (4.08 ms) over 81 samples
+Std deviation: 8893.99 μs (8.89 ms)
 
 === LevelLoaderAndInitializer ===
-Total time:   116109 μs (116.11 ms)
-Average time: 322.52 μs (0.32 ms) over 360 samples
-Std deviation: 946.53 μs (0.95 ms)
+Total time:   149400 μs (149.40 ms)
+Average time: 422.03 μs (0.42 ms) over 354 samples
+Std deviation: 1282.70 μs (1.28 ms)
 
 === DebugMenuConstructor ===
-Total time:   0 μs (0.00 ms)
-Average time: 0.00 μs (0.00 ms) over 2 samples
-Std deviation: 0.00 μs (0.00 ms)
+Total time:   19229 μs (19.23 ms)
+Average time: 9614.50 μs (9.61 ms) over 2 samples
+Std deviation: 9.19 μs (0.01 ms)
 
 === fopen ===
-Total time:   538448 μs (538.45 ms)
-Average time: 99.00 μs (0.10 ms) over 5439 samples
-Std deviation: 943.23 μs (0.94 ms)
+Total time:   184268 μs (184.27 ms)
+Average time: 34.55 μs (0.03 ms) over 5333 samples
+Std deviation: 156.00 μs (0.16 ms)
 
 === gobconstructor ===
-Total time:   1722 μs (1.72 ms)
-Average time: 4.48 μs (0.00 ms) over 384 samples
-Std deviation: 3.95 μs (0.00 ms)
+Total time:   1745 μs (1.75 ms)
+Average time: 4.62 μs (0.00 ms) over 378 samples
+Std deviation: 4.02 μs (0.00 ms)
 
 === areaconstructor ===
-Total time:   16 μs (0.02 ms)
-Average time: 8.00 μs (0.01 ms) over 2 samples
-Std deviation: 1.41 μs (0.00 ms)
+Total time:   72 μs (0.07 ms)
+Average time: 36.00 μs (0.04 ms) over 2 samples
+Std deviation: 2.83 μs (0.00 ms)
+
+=== InitializeGameUI ===
+Total time:   522593 μs (522.59 ms)
+Average time: 261296.50 μs (261.30 ms) over 2 samples
+Std deviation: 89827.31 μs (89.83 ms)
+
+=== GUI_Update3DSceneView ===
+Total time:   3338 μs (3.34 ms)
+Average time: 175.68 μs (0.18 ms) over 19 samples
+Std deviation: 208.86 μs (0.21 ms)
+
+Function data not found for: AllocateMemoryOrThrow
+=== ModuleDirectoryScanner ===
+Total time:   144285 μs (144.28 ms)
+Average time: 1898.49 μs (1.90 ms) over 76 samples
+Std deviation: 5545.40 μs (5.55 ms)
+
+=== ArrayAdd ===
+Total time:   37 μs (0.04 ms)
+Average time: 0.00 μs (0.00 ms) over 7816 samples
+Std deviation: 0.17 μs (0.00 ms)

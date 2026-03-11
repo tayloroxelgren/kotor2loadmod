@@ -140,7 +140,8 @@ void __fastcall Hook_ProcessResourceQueue(int param1, void*, int param2){
             uint32_t packetLen = *(uint32_t*)(base + readPos);
             readPos += 4;
 
-            char* packet = base + readPos;
+            uint32_t payloadStart = readPos;
+            char* packet = base + payloadStart;
             if (*(uint16_t*)packet == 0x4E42){  // "BN"
                 Hook_HandleBNPacket(param1, 0, 0, packet, packetLen);
             }
@@ -153,8 +154,7 @@ void __fastcall Hook_ProcessResourceQueue(int param1, void*, int param2){
                 func(object, 0, 0, packet, packetLen, 0);
             }
             
-            readPos += packetLen;
-            readPos += (4 - (packetLen & 3)) & 3;  // Alignment
+            readPos = payloadStart + packetLen + (4 - (packetLen % 4));
             
             writePos = *writePosPtr;
         }

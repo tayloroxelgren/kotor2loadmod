@@ -9,6 +9,8 @@
 #include <atomic>
 #include <Windows.h>
 
+#define LOGGING_ENABLED 1
+
 // DirectInput8 proxy
 typedef HRESULT(WINAPI *DICREATE)(HINSTANCE, DWORD, REFIID, LPVOID*, LPUNKNOWN);
 static DICREATE realCreate = nullptr;
@@ -16,12 +18,14 @@ static DICREATE realCreate = nullptr;
 // Simple logging
 std::ofstream g_logFile;
 void Log(const std::string& msg) {
-    if (g_logFile.is_open()) {
-        SYSTEMTIME st;
-        GetSystemTime(&st);
-        g_logFile << st.wHour << ":" << st.wMinute << ":" << st.wSecond 
-                  << " - " << msg << std::endl;
-        g_logFile.flush();
+    if(LOGGING_ENABLED){
+        if (g_logFile.is_open()) {
+            SYSTEMTIME st;
+            GetSystemTime(&st);
+            g_logFile << st.wHour << ":" << st.wMinute << ":" << st.wSecond 
+                      << " - " << msg << std::endl;
+            g_logFile.flush();
+        }
     }
 }
 
@@ -131,8 +135,9 @@ void __fastcall Hook_ProcessResourceQueue(int param1, void*, int param2){
         uint32_t readPos  = *readPosPtr;
         uint32_t writePos = *writePosPtr;
         while(readPos != writePos){
-            packetcounter++;
-            Log("Number of packets: " + std::to_string(packetcounter));
+            // Not currently logging packets
+            // packetcounter++;
+            // Log("Number of packets: " + std::to_string(packetcounter));
             if(readPos > 0xFFFF){
                 readPos = 0;
             }
@@ -216,6 +221,7 @@ uint32_t* __fastcall Hook_LoadResourceBlockOrFallback(
 typedef void (__fastcall* PreloadInitialAssetsWrapperPtr_t)(uint32_t param1);
 PreloadInitialAssetsWrapperPtr_t g_originalPreloadInitialAssetsWrapperPtr=nullptr;
 
+// Skips splash screens
 void __fastcall Hook_PreloadInitialAssetsWrapper(uint32_t param1){
     return;
 }
@@ -293,14 +299,17 @@ uint32_t __cdecl Hook_GameObjUpdate(byte param1){
     return result;
 }
 
+thread_local int g_moduleChunkLoadCoreDepth = 0;
 
-typedef uint32_t (__cdecl* ModuleChunkLoadCorePtr_t)(int param1);
-ModuleChunkLoadCorePtr_t g_originalModuleChunkLoadCore=nullptr;
+typedef uint32_t (__fastcall* ModuleChunkLoadCorePtr_t)(int param1);
+ModuleChunkLoadCorePtr_t g_originalModuleChunkLoadCore = nullptr;
 
-uint32_t __cdecl Hook_ModuleChunkLoadCore(int param1){
+uint32_t __fastcall Hook_ModuleChunkLoadCore(int param1, void* edx) {
     auto start = std::chrono::high_resolution_clock::now();
 
-    uint32_t result=g_originalModuleChunkLoadCore(param1);
+    g_moduleChunkLoadCoreDepth++;
+    uint32_t result = g_originalModuleChunkLoadCore(param1);
+    g_moduleChunkLoadCoreDepth--;
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -314,8 +323,17 @@ LoadingScreenUpdateFramePtr_t g_originalLoadingScreenUpdateFrame=nullptr;
 
 void __cdecl Hook_LoadingScreenUpdateFrame(uint32_t param1,int param2,int param3){
     auto start = std::chrono::high_resolution_clock::now();
+    
+    bool calledFromModuleChunkLoadCore = (g_moduleChunkLoadCoreDepth > 0);
 
-    g_originalLoadingScreenUpdateFrame(param1,param2,param3);
+    // Skipping LoadingScreenUpdateFrame when called from ModuleChunkLoadCore with param2 == 0, as this seems to be a redundant
+    if (calledFromModuleChunkLoadCore && param2 == 0) {
+        Log("LoadingScreenUpdateFrame: skipped inside ModuleChunkLoadCore");
+    }
+    else{
+        g_originalLoadingScreenUpdateFrame(param1, param2, param3);
+    }
+
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);

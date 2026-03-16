@@ -119,6 +119,8 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_00711690 ` **ResourceLoaderWrapper**:  Wrapper for resource loader
 - `FUN_0040fe60 ` **SetResourceStateAndTriggerUpdate**: Toggles a state flag for a resource and, if the flag is enabled, triggers a batch update and logging process.
 - `FUN_00411170 ` **UpdateObjectCollectionsAndTrace**:  Iterates through collections of objects, updates their state, and logs the process
+- `FUN_00715c00 ` **Worker_ProcessJob**:  Main worker-side job processor that runs after the thread is resumed, likely consuming the shared job fields and performing the actual resource lookup/loading work before the worker goes idle again.
+- `FUN_00711600 ` **Worker_SubmitJob**:  Waits for the worker slot to become free, writes job parameters into the shared worker state, marks the worker busy, and wakes the suspended worker thread.
 
 ### Classes
 - `0x009AA224`  **CSWGuiMainCharGen::vftable**: Seems to be the class for character creation

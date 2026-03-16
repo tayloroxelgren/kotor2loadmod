@@ -402,7 +402,7 @@ uint32_t* __cdecl Hook_DebugMenuConstructor(uint32_t param1){
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     Log("DebugMenuConstructor: " + std::to_string(duration.count()) + " μs");
-    return 0;
+    return result;
 }
 
 typedef void* (__fastcall* gobconstructorPtr_t)(uint32_t* thisptr, void* edx,char* name);

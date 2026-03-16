@@ -115,12 +115,15 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_00737540` **ModuleDirectoryScanner**:  Walks through the file system and for each file in a directory does something
 - `FUN_006310d0` **LoadGame**:  Loads a save game
 - `FUN_005308b0` **GameSaveLoadManager**:  central save/load system dispatcher for the game. It uses a single-byte parameter to determine which action to perform
-- `FUN_00711750 ` **ResourceLoader**:  Main function that loads resources
-- `FUN_00711690 ` **ResourceLoaderWrapper**:  Wrapper for resource loader
-- `FUN_0040fe60 ` **SetResourceStateAndTriggerUpdate**: Toggles a state flag for a resource and, if the flag is enabled, triggers a batch update and logging process.
-- `FUN_00411170 ` **UpdateObjectCollectionsAndTrace**:  Iterates through collections of objects, updates their state, and logs the process
-- `FUN_00715c00 ` **Worker_ProcessJob**:  Main worker-side job processor that runs after the thread is resumed, likely consuming the shared job fields and performing the actual resource lookup/loading work before the worker goes idle again.
-- `FUN_00711600 ` **Worker_SubmitJob**:  Waits for the worker slot to become free, writes job parameters into the shared worker state, marks the worker busy, and wakes the suspended worker thread.
+- `FUN_00711750` **ResourceLoader**:  Main function that loads resources
+- `FUN_00711690` **ResourceLoaderWrapper**:  Wrapper for resource loader
+- `FUN_0040fe60` **SetResourceStateAndTriggerUpdate**: Toggles a state flag for a resource and, if the flag is enabled, triggers a batch update and logging process.
+- `FUN_00411170` **UpdateObjectCollectionsAndTrace**:  Iterates through collections of objects, updates their state, and logs the process
+- `FUN_00715c00` **Worker_ProcessJob**:  Main worker-side job processor that runs after the thread is resumed, likely consuming the shared job fields and performing the actual resource lookup/loading work before the worker goes idle again.
+- `FUN_00711600` **Worker_SubmitJob**:  Waits for the worker slot to become free, writes job parameters into the shared worker state, marks the worker busy, and wakes the suspended worker thread.
+- `FUN_0069cdb0` **CExoStats::SerializeCombatInfo**:  A GFF serialization function that packs a character's live combat statistics—including attack/damage modifiers, critical hit ranges, and equipped items—into a structured "CombatInfo" field for saving to a file or syncing over the network.
+- `FUN_00638bd0 ` **GameSaveLoad_Core**:  The central dispatcher for the save/load state machine. It coordinates high-level transitions (New Game, Save, or Area Load) by driving the mass-serialization of Gob objects via CExoStats routines. Once data is gathered, it hands the resulting GFF packets to the streaming system via Worker_SubmitJob to be written to disk.
+- `FUN_0065f8a0` **NetPacketMajorDispatcher**:  A high-level packet router that parses incoming "p-prefix" buffers. It identifies the packet's Major Type and dispatches it to the appropriate subsystem handler (e.g., Inventory, Dialog, or CharList). It includes strict overflow/underflow checks and wraps every dispatch in a Tracer logging block, which can cause main-thread stalling during heavy I/O tasks.
 
 ### Classes
 - `0x009AA224`  **CSWGuiMainCharGen::vftable**: Seems to be the class for character creation

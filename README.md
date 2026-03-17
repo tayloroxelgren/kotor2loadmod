@@ -50,6 +50,8 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_007BE4C0` **ModuleChunkLoadCore**: Allocates and parses a module’s sub-chunks, updates the loading screen between groups, and marks the chunk as done.
 - `FUN_008c0cb0` **CSWGuiLoadModuleDebugMenu_Ctor**: Constructs and initializes the Load Module Debug Menu. Sets the vftable, initializes standard debug labels (e.g., LB_OPTIONS, LBL_BUILD), formats build/version text, scans module directories, filters valid module files (e.g., _s.rim), merges/sorts results, and populates the module selection list.
 - `FUN_008bfb60` **CSWGuiPowersFeatsSkillsDebugMenu_Ctor**: Constructs and initializes the Powers/Feats/Skills Debug Menu. Sets the vftable, initializes debug UI labels and build info, and performs menu-specific setup via internal initialization routines.
+- `FUN_008bba80` **CSWGuiDialogCinematic_Ctor**: Constructs and initializes the cinematic dialog GUI. Sets the CSWGuiDialogCinematic vftable, loads dialog_p resources, initializes the replies/message labels (LB_REPLIES, LBL_MESSAGE), configures multiple reply-related child widgets, creates auxiliary dialog state via FUN_008bb5d0, and marks the GUI instance as active.
+- `FUN_008bd910` **CSWGuiDialogComputerCamera_Ctor**: Constructs and initializes the computer-camera dialog GUI. Sets the CSWGuiDialogComputerCamera vftable, initializes an embedded CSWGuiBlackenedLabel, loads computercam_p resources, creates the LBL_RETURN label, and finalizes the layout/state for the computer-camera dialog screen.
 - `FUN_0073F870` **ModuleChunkLoadWrapperA**: Wrapper for ModuleChunkLoadCore
 - `FUN_0078C330` **ModuleChunkLoadWrapperB**: Wrapper for ModuleChunkLoadCore
 - `FUN_00747210` **InitializeGameUI**: Constructs and configures the entire in-game user interface
@@ -150,6 +152,15 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 
 #### Currently going through the phases of ModuleChunkLoadCore base on phases around calls to `LoadingScreenUpdateFrame`
 - Phase 0: GUI Bootstrap: speed negligible
+- Phase 1:
+    - FUN_008bba80
+    - FUN_008bd910
+    - FUN_008bc620
+    - FUN_0089c5f0
+    - FUN_008b1ea0
+    - FUN_008becf0
+    - FUN_008bee10
+    - FUN_00898ca0
 
 
 ## Build Instructions

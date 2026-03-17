@@ -60,7 +60,9 @@ def main():
         ("ModuleDirectoryScanner", re.compile(r'ModuleDirectoryScanner:\s*(\d+)\s*μs')),
         ("ArrayAdd", re.compile(r'ArrayAdd:\s*(\d+)\s*μs')),
         ("CSWGuiLoadModuleDebugMenu_Ctor", re.compile(r'CSWGuiLoadModuleDebugMenu_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiPowersFeatsSkillsDebugMenu_Ctor", re.compile(r'CSWGuiPowersFeatsSkillsDebugMenu_Ctor:\s*(\d+)\s*μs'))
+        ("CSWGuiPowersFeatsSkillsDebugMenu_Ctor", re.compile(r'CSWGuiPowersFeatsSkillsDebugMenu_Ctor:\s*(\d+)\s*μs')),
+        ("CSWGuiDialogCinematic_Ctor", re.compile(r'CSWGuiDialogCinematic_Ctor:\s*(\d+)\s*μs')),
+        ("CSWGuiDialogComputerCamera_Ctor", re.compile(r'CSWGuiDialogComputerCamera_Ctor:\s*(\d+)\s*μs'))
     ]
 
     for name, p in patterns:

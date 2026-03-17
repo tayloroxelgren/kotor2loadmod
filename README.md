@@ -3,7 +3,7 @@ This mod aims to improve the load times for the steam version of Kotor 2
 
 ## Status
 The mod is in early development, but some small improvements have been made
-The mod is in early development, but currently enables the initial splash screens to be skipped on boot of the game. Other functions and improvements are still being explored.
+
 ### Improvements
 - Initial spalsh screens have been skipped by no oping `PreloadInitialAssetsWrapper`
 - No oping `LoadingScreenUpdateFrame` when it is called from `ModuleChunkLoadCore`

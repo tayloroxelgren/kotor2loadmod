@@ -317,6 +317,35 @@ uint32_t __fastcall Hook_ModuleChunkLoadCore(int param1, void* edx) {
     return result;
 }
 
+typedef void* (__fastcall* CSWGuiLoadModuleDebugMenu_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiLoadModuleDebugMenu_CtorPtr_t g_originalCSWGuiLoadModuleDebugMenu_Ctor = nullptr;
+
+void* __fastcall Hook_CSWGuiLoadModuleDebugMenu_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    // no oping this
+    // void* result = g_originalCSWGuiLoadModuleDebugMenu_Ctor(thisPtr,edx,param1);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiLoadModuleDebugMenu_Ctor: " + std::to_string(duration.count()) + " μs");
+    return 0;
+}
+
+typedef uint32_t* (__fastcall* CSWGuiPowersFeatsSkillsDebugMenu_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiPowersFeatsSkillsDebugMenu_CtorPtr_t g_originalCSWGuiPowersFeatsSkillsDebugMenu_Ctor = nullptr;
+
+uint32_t* __fastcall Hook_CSWGuiPowersFeatsSkillsDebugMenu_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    // no oping this
+    // uint32_t* result = g_originalCSWGuiPowersFeatsSkillsDebugMenu_Ctor(thisPtr,edx,param1);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiPowersFeatsSkillsDebugMenu_Ctor: " + std::to_string(duration.count()) + " μs");
+    return 0;
+}
 
 typedef void (__cdecl* LoadingScreenUpdateFramePtr_t)(uint32_t param1,int param2,int param3);
 LoadingScreenUpdateFramePtr_t g_originalLoadingScreenUpdateFrame=nullptr;
@@ -395,14 +424,15 @@ FILE* __cdecl Hook_fopen(char* filename, char* mode){
 typedef uint32_t* (__cdecl* DebugMenuContructorPtr_t)(uint32_t param1);
 DebugMenuContructorPtr_t g_originalDebugMenuConstructor=nullptr;
 uint32_t* __cdecl Hook_DebugMenuConstructor(uint32_t param1){
-        auto start = std::chrono::high_resolution_clock::now();
-    
-    uint32_t* result =g_originalDebugMenuConstructor(param1);
+    auto start = std::chrono::high_resolution_clock::now();
+    // attempting to just have it do nothing
+    // ignoring this works fine but it only saves like 4ms per load
+    // uint32_t* result =g_originalDebugMenuConstructor(param1);
     
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     Log("DebugMenuConstructor: " + std::to_string(duration.count()) + " μs");
-    return result;
+    return 0;
 }
 
 typedef void* (__fastcall* gobconstructorPtr_t)(uint32_t* thisptr, void* edx,char* name);
@@ -697,6 +727,30 @@ void InstallHook() {
         (LPVOID*)&g_originalModuleChunkLoadCore) == MH_OK) {
             if (MH_EnableHook(targetAddr_ModuleChunkLoadCore) == MH_OK) {
                 Log("ModuleChunkLoadCore hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_CSWGuiLoadModuleDebugMenu_Ctor = (void*)(0x8c0cb0); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_CSWGuiLoadModuleDebugMenu_Ctor, &Hook_CSWGuiLoadModuleDebugMenu_Ctor, 
+        (LPVOID*)&g_originalCSWGuiLoadModuleDebugMenu_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiLoadModuleDebugMenu_Ctor) == MH_OK) {
+                Log("CSWGuiLoadModuleDebugMenu_Ctor hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_CSWGuiPowersFeatsSkillsDebugMenu_Ctor = (void*)(0x8bfb60); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_CSWGuiPowersFeatsSkillsDebugMenu_Ctor, &Hook_CSWGuiPowersFeatsSkillsDebugMenu_Ctor, 
+        (LPVOID*)&g_originalCSWGuiPowersFeatsSkillsDebugMenu_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiPowersFeatsSkillsDebugMenu_Ctor) == MH_OK) {
+                Log("CSWGuiPowersFeatsSkillsDebugMenu_Ctor hook installed successfully");
             } else {
                 Log("Failed to enable hook");
             }

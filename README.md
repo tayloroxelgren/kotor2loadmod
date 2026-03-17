@@ -48,6 +48,8 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_00811450` **ModuleHandler**: Loads and initializes each game module, bringing in level data, assets, and scripts needed for the world.
 - `FUN_0080deb0` **GameObjUpdate**: Processes incoming object-update packets, creating or refreshing in-game entities and syncing their state during the loading phase.
 - `FUN_007BE4C0` **ModuleChunkLoadCore**: Allocates and parses a module’s sub-chunks, updates the loading screen between groups, and marks the chunk as done.
+- `FUN_008c0cb0` **CSWGuiLoadModuleDebugMenu_Ctor**: Constructs and initializes the Load Module Debug Menu. Sets the vftable, initializes standard debug labels (e.g., LB_OPTIONS, LBL_BUILD), formats build/version text, scans module directories, filters valid module files (e.g., _s.rim), merges/sorts results, and populates the module selection list.
+- `FUN_008bfb60` **CSWGuiPowersFeatsSkillsDebugMenu_Ctor**: Constructs and initializes the Powers/Feats/Skills Debug Menu. Sets the vftable, initializes debug UI labels and build info, and performs menu-specific setup via internal initialization routines.
 - `FUN_0073F870` **ModuleChunkLoadWrapperA**: Wrapper for ModuleChunkLoadCore
 - `FUN_0078C330` **ModuleChunkLoadWrapperB**: Wrapper for ModuleChunkLoadCore
 - `FUN_00747210` **InitializeGameUI**: Constructs and configures the entire in-game user interface
@@ -123,7 +125,7 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `FUN_00711600` **Worker_SubmitJob**:  Waits for the worker slot to become free, writes job parameters into the shared worker state, marks the worker busy, and wakes the suspended worker thread.
 - `FUN_0069cdb0` **CExoStats::SerializeCombatInfo**:  A GFF serialization function that packs a character's live combat statistics—including attack/damage modifiers, critical hit ranges, and equipped items—into a structured "CombatInfo" field for saving to a file or syncing over the network.
 - `FUN_00638bd0 ` **GameSaveLoad_Core**:  The central dispatcher for the save/load state machine. It coordinates high-level transitions (New Game, Save, or Area Load) by driving the mass-serialization of Gob objects via CExoStats routines. Once data is gathered, it hands the resulting GFF packets to the streaming system via Worker_SubmitJob to be written to disk.
-- `FUN_0065f8a0` **NetPacketMajorDispatcher**:  A high-level packet router that parses incoming "p-prefix" buffers. It identifies the packet's Major Type and dispatches it to the appropriate subsystem handler (e.g., Inventory, Dialog, or CharList). It includes strict overflow/underflow checks and wraps every dispatch in a Tracer logging block, which can cause main-thread stalling during heavy I/O tasks.
+- `FUN_0065f8a0` **NetPacketMajorDispatcher**:  A high-level packet router that parses incoming "p-prefix" buffers. It identifies the packet's Major Type and dispatches it to the appropriate subsystem handler (e.g., Inventory, Dialog, or CharList). It includes strict overflow/underflow checks and wraps every dispatch in a Tracer logging block
 
 ### Classes
 - `0x009AA224`  **CSWGuiMainCharGen::vftable**: Seems to be the class for character creation
@@ -131,6 +133,7 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `0x0098B5CC`  **Gob::vftable**: Base game object class used to represent in-world entities. Contains a wide range of virtual functions for lifecycle management, serialization, rendering, and asset loading. 
 - `0x009a7a74`  **CSWGuiInGameAreaTransition::vftable**: Gui for area transition display during loading screen
 - `0x0099493c`  **CSWSModule::vftable::vftable**: Module class
+- `0x00992398`  **CServerExoApp::vftable**: The virtual function table for the internal game server. This class manages the world simulation "heartbeat," background task scheduling via the Microsoft Concurrency Runtime, and serves as the primary owner of the world logic that receives and processes network packets from the client.
 
 
 ### Code Paths
@@ -144,6 +147,10 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
                 - ModuleChunkLoadWrapperA
                     - ModuleChunkLoadCore
                         - InitializeGameUI
+
+#### Currently going through the phases of ModuleChunkLoadCore base on phases around calls to `LoadingScreenUpdateFrame`
+- Phase 0: GUI Bootstrap: speed negligible
+
 
 ## Build Instructions
 Download [MinHook](https://github.com/TsudaKageyu/minhook)

@@ -55,6 +55,10 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 |`FUN_008bd910` | **CSWGuiDialogComputerCamera_Ctor** | Constructs and initializes the computer-camera dialog GUI. Sets the CSWGuiDialogComputerCamera vftable, initializes an embedded CSWGuiBlackenedLabel, loads computercam_p resources, creates the LBL_RETURN label, and finalizes the layout/state for the computer-camera dialog screen. | yes |
 |`FUN_008bc620` | **CSWGuiDialogComputer_Ctor** | Constructs the terminal interaction GUI. Sets the vftable, loads computer_p resources, and initializes terminal-specific labels for Computer Spikes (LBL_COMP_SPIKES), Repair Parts, and the 10-slot status bar. | yes |
 |`FUN_0089c5f0` | **CSWGuiSkillInfoBox_Ctor** | Constructs the Skill Info UI box. Sets the vftable, loads skillinfo_p resources, and maps the skills list (LB_SKILLS), info message (LBL_MESSAGE), and confirmation button (BTN_OK). Also initializes a 20-slot array (0x14 iterations) for skill data entries and registers interaction callbacks. | yes |
+|`FUN_008b1ea0` | **CSWGuiContainer_Ctor** | Constructs the loot/container GUI. Sets the vftable, loads container_p resources, and maps list/button elements including LB_ITEMS, BTN_GIVEITEMS (Take All), and BTN_OK. It also calculates UI scaling factors and registers button callbacks (B/X/Cancel) for inventory interaction. | yes |
+|`FUN_008becf0` | **CSWGuiExamine_Ctor** | Constructs the Examine/Description GUI. Sets the CSWGuiExamine vftable, initializes the base class, and sets up the internal text buffer (0x62E size) used to display item descriptions and lore | yes |
+|`FUN_008bee10` | **CSWGuiCreateDebugItemSubMenu_Ctor** | Constructs the Item Creation Debug menu. Sets the vftable, loads debug_p resources, and initializes the LB_OPTIONS list and LBL_BUILD text label. It also pulls a "Build: " string (likely for versioning or debug tracking) and registers UI tracing for the submenu. | yes |
+|`FUN_00898ca0` | **CSWGuiTutorialBox_Ctor** | Constructs the Tutorial Message GUI. Sets the vftable, initializes the base class via FUN_0075ae40, and loads the fnt_d16x16 font resource. It also sets default background transparency/colors and defines the internal text buffer properties. | yes |
 |`FUN_0073F870` | **ModuleChunkLoadWrapperA** | Wrapper for ModuleChunkLoadCore | no |
 |`FUN_0078C330` | **ModuleChunkLoadWrapperB** | Wrapper for ModuleChunkLoadCore | no |
 |`FUN_00747210` | **InitializeGameUI** | Constructs and configures the entire in-game user interface | yes |
@@ -149,13 +153,8 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
                         - InitializeGameUI
 
 #### Currently going through the phases of ModuleChunkLoadCore based on phases around calls to `LoadingScreenUpdateFrame`
-- Phase 0: GUI Bootstrap: speed negligible
-- Phase 1:
-    - FUN_008b1ea0
-    - FUN_008becf0
-    - FUN_008bee10
-    - FUN_00898ca0
-
+- Phase 0: Negligible cost. Initial debug/bootstrap GUI setup does not materially contribute to total load time.
+- Phase 1:  Low impact overall. This phase appears to be dominated by small GUI constructor and allocation work, but does not account for a meaningful portion of time.
 
 ## Build Instructions
 Download [MinHook](https://github.com/TsudaKageyu/minhook)

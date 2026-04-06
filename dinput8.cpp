@@ -389,6 +389,60 @@ uint32_t* __fastcall Hook_CSWGuiDialogComputer_Ctor(void* thisPtr, void* edx, ui
     return result;
 }
 
+typedef uint32_t* (__fastcall* CSWGuiContainer_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiContainer_CtorPtr_t g_originalCSWGuiContainer_Ctor = nullptr;
+uint32_t* __fastcall Hook_CSWGuiContainer_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t* result = g_originalCSWGuiContainer_Ctor(thisPtr,edx,param1);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiContainer_Ctor: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t* (__fastcall* CSWGuiExamine_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiExamine_CtorPtr_t g_originalCSWGuiExamine_Ctor = nullptr;
+uint32_t* __fastcall Hook_CSWGuiExamine_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t* result = g_originalCSWGuiExamine_Ctor(thisPtr,edx,param1);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiExamine_Ctor: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t* (__fastcall* CSWGuiCreateDebugItemSubMenu_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiCreateDebugItemSubMenu_CtorPtr_t g_originalCSWGuiCreateDebugItemSubMenu_Ctor = nullptr;
+
+uint32_t* __fastcall Hook_CSWGuiCreateDebugItemSubMenu_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t* result = g_originalCSWGuiCreateDebugItemSubMenu_Ctor(thisPtr,edx,param1);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiCreateDebugItemSubMenu_Ctor: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t* (__fastcall* CSWGuiTutorialBox_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiTutorialBox_CtorPtr_t g_originalCSWGuiTutorialBox_Ctor = nullptr;
+
+uint32_t* __fastcall Hook_CSWGuiTutorialBox_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t* result = g_originalCSWGuiTutorialBox_Ctor(thisPtr,edx,param1);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiTutorialBox_Ctor: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
 typedef uint32_t* (__fastcall* CSWGuiSkillInfoBox_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
 CSWGuiSkillInfoBox_CtorPtr_t g_originalCSWGuiSkillInfoBox_Ctor = nullptr;
 
@@ -856,6 +910,54 @@ void InstallHook() {
         (LPVOID*)&g_originalCSWGuiDialogComputer_Ctor) == MH_OK) {
             if (MH_EnableHook(targetAddr_CSWGuiDialogComputer_Ctor) == MH_OK) {
                 Log("CSWGuiDialogComputer_Ctor hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_CSWGuiContainer_Ctor = (void*)(0x8b1ea0); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_CSWGuiContainer_Ctor, &Hook_CSWGuiContainer_Ctor, 
+        (LPVOID*)&g_originalCSWGuiContainer_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiContainer_Ctor) == MH_OK) {
+                Log("CSWGuiContainer_Ctor hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_CSWGuiExamine_Ctor = (void*)(0x8becf0); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_CSWGuiExamine_Ctor, &Hook_CSWGuiExamine_Ctor, 
+        (LPVOID*)&g_originalCSWGuiExamine_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiExamine_Ctor) == MH_OK) {
+                Log("CSWGuiExamine_Ctor hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_CSWGuiCreateDebugItemSubMenu_Ctor = (void*)(0x8bee10); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_CSWGuiCreateDebugItemSubMenu_Ctor, &Hook_CSWGuiCreateDebugItemSubMenu_Ctor, 
+        (LPVOID*)&g_originalCSWGuiCreateDebugItemSubMenu_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiCreateDebugItemSubMenu_Ctor) == MH_OK) {
+                Log("CSWGuiCreateDebugItemSubMenu_Ctor hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+    
+    void* targetAddr_CSWGuiTutorialBox_Ctor = (void*)(0x8bf1c0); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_CSWGuiTutorialBox_Ctor, &Hook_CSWGuiTutorialBox_Ctor, 
+        (LPVOID*)&g_originalCSWGuiTutorialBox_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiTutorialBox_Ctor) == MH_OK) {
+                Log("CSWGuiTutorialBox_Ctor hook installed successfully");
             } else {
                 Log("Failed to enable hook");
             }

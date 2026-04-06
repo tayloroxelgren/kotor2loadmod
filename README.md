@@ -53,6 +53,7 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 |`FUN_008bfb60` | **CSWGuiPowersFeatsSkillsDebugMenu_Ctor** | Constructs and initializes the Powers/Feats/Skills Debug Menu. Sets the vftable, initializes debug UI labels and build info, and performs menu-specific setup via internal initialization routines. | yes |
 |`FUN_008bba80` | **CSWGuiDialogCinematic_Ctor** | Constructs and initializes the cinematic dialog GUI. Sets the CSWGuiDialogCinematic vftable, loads dialog_p resources, initializes the replies/message labels (LB_REPLIES, LBL_MESSAGE), configures multiple reply-related child widgets, creates auxiliary dialog state via FUN_008bb5d0, and marks the GUI instance as active. | yes |
 |`FUN_008bd910` | **CSWGuiDialogComputerCamera_Ctor** | Constructs and initializes the computer-camera dialog GUI. Sets the CSWGuiDialogComputerCamera vftable, initializes an embedded CSWGuiBlackenedLabel, loads computercam_p resources, creates the LBL_RETURN label, and finalizes the layout/state for the computer-camera dialog screen. | yes |
+|`FUN_008bc620` | **CSWGuiDialogComputer_Ctor** | Constructs the terminal interaction GUI. Sets the vftable, loads computer_p resources, and initializes terminal-specific labels for Computer Spikes (LBL_COMP_SPIKES), Repair Parts, and the 10-slot status bar. | yes |
 |`FUN_0073F870` | **ModuleChunkLoadWrapperA** | Wrapper for ModuleChunkLoadCore | no |
 |`FUN_0078C330` | **ModuleChunkLoadWrapperB** | Wrapper for ModuleChunkLoadCore | no |
 |`FUN_00747210` | **InitializeGameUI** | Constructs and configures the entire in-game user interface | yes |
@@ -146,11 +147,9 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
                     - ModuleChunkLoadCore
                         - InitializeGameUI
 
-#### Currently going through the phases of ModuleChunkLoadCore base on phases around calls to `LoadingScreenUpdateFrame`
+#### Currently going through the phases of ModuleChunkLoadCore based on phases around calls to `LoadingScreenUpdateFrame`
 - Phase 0: GUI Bootstrap: speed negligible
 - Phase 1:
-    - FUN_008bba80
-    - FUN_008bd910
     - FUN_008bc620
     - FUN_0089c5f0
     - FUN_008b1ea0

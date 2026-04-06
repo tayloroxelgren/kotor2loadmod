@@ -63,7 +63,8 @@ def main():
         ("CSWGuiPowersFeatsSkillsDebugMenu_Ctor", re.compile(r'CSWGuiPowersFeatsSkillsDebugMenu_Ctor:\s*(\d+)\s*μs')),
         ("CSWGuiDialogCinematic_Ctor", re.compile(r'CSWGuiDialogCinematic_Ctor:\s*(\d+)\s*μs')),
         ("CSWGuiDialogComputerCamera_Ctor", re.compile(r'CSWGuiDialogComputerCamera_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiComputerDialog_Ctor", re.compile(r'CSWGuiComputerDialog_Ctor:\s*(\d+)\s*μs'))
+        ("CSWGuiComputerDialog_Ctor", re.compile(r'CSWGuiComputerDialog_Ctor:\s*(\d+)\s*μs')),
+        ("CSWGuiSkillInfoBox_Ctor", re.compile(r'CSWGuiSkillInfoBox_Ctor:\s*(\d+)\s*μs'))
     ]
 
     for name, p in patterns:

@@ -389,6 +389,20 @@ uint32_t* __fastcall Hook_CSWGuiDialogComputer_Ctor(void* thisPtr, void* edx, ui
     return result;
 }
 
+typedef uint32_t* (__fastcall* CSWGuiSkillInfoBox_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiSkillInfoBox_CtorPtr_t g_originalCSWGuiSkillInfoBox_Ctor = nullptr;
+
+uint32_t* __fastcall Hook_CSWGuiSkillInfoBox_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t* result = g_originalCSWGuiSkillInfoBox_Ctor(thisPtr,edx,param1);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiSkillInfoBox_Ctor: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
 typedef void (__cdecl* LoadingScreenUpdateFramePtr_t)(uint32_t param1,int param2,int param3);
 LoadingScreenUpdateFramePtr_t g_originalLoadingScreenUpdateFrame=nullptr;
 
@@ -818,6 +832,18 @@ void InstallHook() {
         (LPVOID*)&g_originalCSWGuiDialogComputerCamera_Ctor) == MH_OK) {
             if (MH_EnableHook(targetAddr_CSWGuiDialogComputerCamera_Ctor) == MH_OK) {
                 Log("CSWGuiDialogComputerCamera_Ctor hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_CSWGuiSkillInfoBox_Ctor = (void*)(0x89c5f0); //Just putting in actual address
+    if (MH_CreateHook(targetAddr_CSWGuiSkillInfoBox_Ctor, &Hook_CSWGuiSkillInfoBox_Ctor, 
+        (LPVOID*)&g_originalCSWGuiSkillInfoBox_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiSkillInfoBox_Ctor) == MH_OK) {
+                Log("CSWGuiSkillInfoBox_Ctor hook installed successfully");
             } else {
                 Log("Failed to enable hook");
             }

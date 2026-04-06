@@ -644,6 +644,20 @@ void __fastcall Hook_ArrayAdd(int* param1,void* edxdummy,uint32_t param2){
     Log("ArrayAdd: " + std::to_string(duration.count()) + " μs");
 }
 
+typedef void* (__cdecl* OpenOrStreamGameFilePtr_t)(char *param1, char *param2, uint32_t *param3, char param4);
+OpenOrStreamGameFilePtr_t g_originalOpenOrStreamGameFile = nullptr;
+
+void* __cdecl Hook_OpenOrStreamGameFile(char *param1, char *param2, uint32_t *param3, char param4){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    void* result = g_originalOpenOrStreamGameFile(param1, param2, param3, param4);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("OpenOrStreamGameFile: " + std::to_string(duration.count()) + " μs");
+
+    return result;
+}
 
 void InstallHook() {
     
@@ -1103,6 +1117,18 @@ void InstallHook() {
         (LPVOID*)&g_originalArrayAdd) == MH_OK) {
             if (MH_EnableHook(targetAddr_ArrayAdd) == MH_OK) {
                 Log("ArrayAdd hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_OpenOrStreamGameFile = (void*)(0x475ab0);
+    if (MH_CreateHook(targetAddr_OpenOrStreamGameFile, &Hook_OpenOrStreamGameFile, 
+        (LPVOID*)&g_originalOpenOrStreamGameFile) == MH_OK) {
+            if (MH_EnableHook(targetAddr_OpenOrStreamGameFile) == MH_OK) {
+                Log("OpenOrStreamGameFile hook installed successfully");
             } else {
                 Log("Failed to enable hook");
             }

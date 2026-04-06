@@ -68,7 +68,8 @@ def main():
         ("CSWGuiContainer_Ctor", re.compile(r'CSWGuiContainer_Ctor:\s*(\d+)\s*μs')),
         ("CSWGuiExamine_Ctor", re.compile(r'CSWGuiExamine_Ctor:\s*(\d+)\s*μs')),
         ("CSWGuiCreateDebugItemSubMenu_Ctor", re.compile(r'CSWGuiCreateDebugItemSubMenu_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiTutorialBox_Ctor", re.compile(r'CSWGuiTutorialBox_Ctor:\s*(\d+)\s*μs'))
+        ("CSWGuiTutorialBox_Ctor", re.compile(r'CSWGuiTutorialBox_Ctor:\s*(\d+)\s*μs')),
+        ("OpenOrStreamGameFile", re.compile(r'OpenOrStreamGameFile:\s*(\d+)\s*μs'))
     ]
 
     for name, p in patterns:

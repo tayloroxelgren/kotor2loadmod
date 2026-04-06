@@ -130,6 +130,7 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 |`FUN_0069cdb0` | **CExoStats::SerializeCombatInfo** | A GFF serialization function that packs a character's live combat statistics—including attack/damage modifiers, critical hit ranges, and equipped items—into a structured "CombatInfo" field for saving to a file or syncing over the network. | no |
 |`FUN_00638bd0` | **GameSaveLoad_Core** | The central dispatcher for the save/load state machine. It coordinates high-level transitions (New Game, Save, or Area Load) by driving the mass-serialization of Gob objects via CExoStats routines. Once data is gathered, it hands the resulting GFF packets to the streaming system via Worker_SubmitJob to be written to disk. | no |
 |`FUN_0065f8a0` | **NetPacketMajorDispatcher** | A high-level packet router that parses incoming "p-prefix" buffers. It identifies the packet's Major Type and dispatches it to the appropriate subsystem handler (e.g., Inventory, Dialog, or CharList). It includes strict overflow/underflow checks and wraps every dispatch in a Tracer logging block | no |
+|`FUN_0048b6f0` | **Mesh_ParseMaterialAndGeometry** | A high-level material state machine that maps textures (texture0/1), defines mesh buffers (verts, colors, faces), and calculates real-time UV transformations for animated effects like scrolling or jitter. | no |
 
 ### Classes
 - `0x009AA224`  **CSWGuiMainCharGen::vftable**: Seems to be the class for character creation

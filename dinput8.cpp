@@ -457,6 +457,237 @@ uint32_t* __fastcall Hook_CSWGuiSkillInfoBox_Ctor(void* thisPtr, void* edx, uint
     return result;
 }
 
+typedef uint32_t* (__fastcall* CSWGuiBarkBubble_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiBarkBubble_CtorPtr_t g_originalCSWGuiBarkBubble_Ctor = nullptr;
+uint32_t* __fastcall Hook_CSWGuiBarkBubble_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+    uint32_t* result = g_originalCSWGuiBarkBubble_Ctor(thisPtr,edx,param1);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiBarkBubble_Ctor: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t* (__fastcall* CSWGuiMessageBox_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiMessageBox_CtorPtr_t g_originalCSWGuiMessageBox_Ctor = nullptr;
+uint32_t* __fastcall Hook_CSWGuiMessageBox_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+    uint32_t* result = g_originalCSWGuiMessageBox_Ctor(thisPtr,edx,param1);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiMessageBox_Ctor: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t* (__fastcall* CSWGuiMessageBoxVariant_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiMessageBoxVariant_CtorPtr_t g_originalCSWGuiMessageBoxVariant_Ctor = nullptr;
+uint32_t* __fastcall Hook_CSWGuiMessageBoxVariant_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+    uint32_t* result = g_originalCSWGuiMessageBoxVariant_Ctor(thisPtr,edx,param1);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiMessageBoxVariant_Ctor: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t* (__fastcall* CSWGuiDialogLetterbox_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiDialogLetterbox_CtorPtr_t g_originalCSWGuiDialogLetterbox_Ctor = nullptr;
+uint32_t* __fastcall Hook_CSWGuiDialogLetterbox_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+    uint32_t* result = g_originalCSWGuiDialogLetterbox_Ctor(thisPtr,edx,param1);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiDialogLetterbox_Ctor: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t* (__fastcall* CSWGuiFade_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiFade_CtorPtr_t g_originalCSWGuiFade_Ctor = nullptr;
+uint32_t* __fastcall Hook_CSWGuiFade_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+    uint32_t* result = g_originalCSWGuiFade_Ctor(thisPtr,edx,param1);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiFade_Ctor: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t* (__fastcall* CSWGuiInGameMenu_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiInGameMenu_CtorPtr_t g_originalCSWGuiInGameMenu_Ctor = nullptr;
+uint32_t* __fastcall Hook_CSWGuiInGameMenu_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+    uint32_t* result = g_originalCSWGuiInGameMenu_Ctor(thisPtr,edx,param1);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiInGameMenu_Ctor: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t* (__fastcall* CSWGuiInGamePause_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiInGamePause_CtorPtr_t g_originalCSWGuiInGamePause_Ctor = nullptr;
+uint32_t* __fastcall Hook_CSWGuiInGamePause_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+    uint32_t* result = g_originalCSWGuiInGamePause_Ctor(thisPtr,edx,param1);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiInGamePause_Ctor: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t* (__fastcall* CSWGuiInGameSoloModeQuery_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiInGameSoloModeQuery_CtorPtr_t g_originalCSWGuiInGameSoloModeQuery_Ctor = nullptr;
+uint32_t* __fastcall Hook_CSWGuiInGameSoloModeQuery_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+    uint32_t* result = g_originalCSWGuiInGameSoloModeQuery_Ctor(thisPtr,edx,param1);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiInGameSoloModeQuery_Ctor: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t* (__fastcall* CSWGuiInGameAreaTransition_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiInGameAreaTransition_CtorPtr_t g_originalCSWGuiInGameAreaTransition_Ctor = nullptr;
+uint32_t* __fastcall Hook_CSWGuiInGameAreaTransition_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+    uint32_t* result = g_originalCSWGuiInGameAreaTransition_Ctor(thisPtr,edx,param1);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiInGameAreaTransition_Ctor: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t* (__fastcall* CSWGuiInGameMessages_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiInGameMessages_CtorPtr_t g_originalCSWGuiInGameMessages_Ctor = nullptr;
+uint32_t* __fastcall Hook_CSWGuiInGameMessages_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+    uint32_t* result = g_originalCSWGuiInGameMessages_Ctor(thisPtr,edx,param1);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiInGameMessages_Ctor: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t* (__fastcall* CSWGuiStore_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiStore_CtorPtr_t g_originalCSWGuiStore_Ctor = nullptr;
+uint32_t* __fastcall Hook_CSWGuiStore_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+    uint32_t* result = g_originalCSWGuiStore_Ctor(thisPtr,edx,param1);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiStore_Ctor: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t* (__fastcall* CSWGuiInGameEquip_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiInGameEquip_CtorPtr_t g_originalCSWGuiInGameEquip_Ctor = nullptr;
+uint32_t* __fastcall Hook_CSWGuiInGameEquip_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+    uint32_t* result = g_originalCSWGuiInGameEquip_Ctor(thisPtr,edx,param1);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiInGameEquip_Ctor: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t* (__fastcall* CSWGuiInGameInventory_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiInGameInventory_CtorPtr_t g_originalCSWGuiInGameInventory_Ctor = nullptr;
+uint32_t* __fastcall Hook_CSWGuiInGameInventory_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+    uint32_t* result = g_originalCSWGuiInGameInventory_Ctor(thisPtr,edx,param1);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiInGameInventory_Ctor: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t* (__fastcall* CSWGuiInGameCharacter_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiInGameCharacter_CtorPtr_t g_originalCSWGuiInGameCharacter_Ctor = nullptr;
+uint32_t* __fastcall Hook_CSWGuiInGameCharacter_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+    uint32_t* result = g_originalCSWGuiInGameCharacter_Ctor(thisPtr,edx,param1);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiInGameCharacter_Ctor: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t* (__fastcall* CSWGuiStatusSummary_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiStatusSummary_CtorPtr_t g_originalCSWGuiStatusSummary_Ctor = nullptr;
+uint32_t* __fastcall Hook_CSWGuiStatusSummary_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+    uint32_t* result = g_originalCSWGuiStatusSummary_Ctor(thisPtr,edx,param1);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiStatusSummary_Ctor: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t* (__fastcall* CSWGuiInGameMap_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiInGameMap_CtorPtr_t g_originalCSWGuiInGameMap_Ctor = nullptr;
+uint32_t* __fastcall Hook_CSWGuiInGameMap_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+    uint32_t* result = g_originalCSWGuiInGameMap_Ctor(thisPtr,edx,param1);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiInGameMap_Ctor: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t* (__fastcall* CSWGuiInGameAbilities_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiInGameAbilities_CtorPtr_t g_originalCSWGuiInGameAbilities_Ctor = nullptr;
+uint32_t* __fastcall Hook_CSWGuiInGameAbilities_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+    uint32_t* result = g_originalCSWGuiInGameAbilities_Ctor(thisPtr,edx,param1);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiInGameAbilities_Ctor: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t* (__fastcall* CSWGuiInGameJournal_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiInGameJournal_CtorPtr_t g_originalCSWGuiInGameJournal_Ctor = nullptr;
+uint32_t* __fastcall Hook_CSWGuiInGameJournal_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+    uint32_t* result = g_originalCSWGuiInGameJournal_Ctor(thisPtr,edx,param1);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiInGameJournal_Ctor: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t* (__fastcall* CSWGuiInGameOptions_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiInGameOptions_CtorPtr_t g_originalCSWGuiInGameOptions_Ctor = nullptr;
+uint32_t* __fastcall Hook_CSWGuiInGameOptions_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+    uint32_t* result = g_originalCSWGuiInGameOptions_Ctor(thisPtr,edx,param1);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiInGameOptions_Ctor: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t* (__fastcall* CSWGuiPartySelection_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiPartySelection_CtorPtr_t g_originalCSWGuiPartySelection_Ctor = nullptr;
+uint32_t* __fastcall Hook_CSWGuiPartySelection_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+    uint32_t* result = g_originalCSWGuiPartySelection_Ctor(thisPtr,edx,param1);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiPartySelection_Ctor: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t* (__fastcall* CSWGuiInGameGalaxyMap_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
+CSWGuiInGameGalaxyMap_CtorPtr_t g_originalCSWGuiInGameGalaxyMap_Ctor = nullptr;
+uint32_t* __fastcall Hook_CSWGuiInGameGalaxyMap_Ctor(void* thisPtr, void* edx, uint32_t param1){
+    auto start = std::chrono::high_resolution_clock::now();
+    uint32_t* result = g_originalCSWGuiInGameGalaxyMap_Ctor(thisPtr,edx,param1);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiInGameGalaxyMap_Ctor: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
 typedef void (__cdecl* LoadingScreenUpdateFramePtr_t)(uint32_t param1,int param2,int param3);
 LoadingScreenUpdateFramePtr_t g_originalLoadingScreenUpdateFrame=nullptr;
 
@@ -978,6 +1209,174 @@ void InstallHook() {
         } else {
             Log("Failed to create hook");
         }
+
+    void* targetAddr_CSWGuiBarkBubble_Ctor = (void*)(0x8bdc90);
+    if (MH_CreateHook(targetAddr_CSWGuiBarkBubble_Ctor, &Hook_CSWGuiBarkBubble_Ctor,
+        (LPVOID*)&g_originalCSWGuiBarkBubble_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiBarkBubble_Ctor) == MH_OK) {
+                Log("CSWGuiBarkBubble_Ctor hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CSWGuiMessageBox_Ctor = (void*)(0x75ae40);
+    if (MH_CreateHook(targetAddr_CSWGuiMessageBox_Ctor, &Hook_CSWGuiMessageBox_Ctor,
+        (LPVOID*)&g_originalCSWGuiMessageBox_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiMessageBox_Ctor) == MH_OK) {
+                Log("CSWGuiMessageBox_Ctor hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CSWGuiMessageBoxVariant_Ctor = (void*)(0x75b370);
+    if (MH_CreateHook(targetAddr_CSWGuiMessageBoxVariant_Ctor, &Hook_CSWGuiMessageBoxVariant_Ctor,
+        (LPVOID*)&g_originalCSWGuiMessageBoxVariant_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiMessageBoxVariant_Ctor) == MH_OK) {
+                Log("CSWGuiMessageBoxVariant_Ctor hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CSWGuiDialogLetterbox_Ctor = (void*)(0x8ba980);
+    if (MH_CreateHook(targetAddr_CSWGuiDialogLetterbox_Ctor, &Hook_CSWGuiDialogLetterbox_Ctor,
+        (LPVOID*)&g_originalCSWGuiDialogLetterbox_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiDialogLetterbox_Ctor) == MH_OK) {
+                Log("CSWGuiDialogLetterbox_Ctor hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CSWGuiFade_Ctor = (void*)(0x7bc600);
+    if (MH_CreateHook(targetAddr_CSWGuiFade_Ctor, &Hook_CSWGuiFade_Ctor,
+        (LPVOID*)&g_originalCSWGuiFade_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiFade_Ctor) == MH_OK) {
+                Log("CSWGuiFade_Ctor hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CSWGuiInGameMenu_Ctor = (void*)(0x754ed0);
+    if (MH_CreateHook(targetAddr_CSWGuiInGameMenu_Ctor, &Hook_CSWGuiInGameMenu_Ctor,
+        (LPVOID*)&g_originalCSWGuiInGameMenu_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiInGameMenu_Ctor) == MH_OK) {
+                Log("CSWGuiInGameMenu_Ctor hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CSWGuiInGamePause_Ctor = (void*)(0x8b91f0);
+    if (MH_CreateHook(targetAddr_CSWGuiInGamePause_Ctor, &Hook_CSWGuiInGamePause_Ctor,
+        (LPVOID*)&g_originalCSWGuiInGamePause_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiInGamePause_Ctor) == MH_OK) {
+                Log("CSWGuiInGamePause_Ctor hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CSWGuiInGameSoloModeQuery_Ctor = (void*)(0x8b8c40);
+    if (MH_CreateHook(targetAddr_CSWGuiInGameSoloModeQuery_Ctor, &Hook_CSWGuiInGameSoloModeQuery_Ctor,
+        (LPVOID*)&g_originalCSWGuiInGameSoloModeQuery_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiInGameSoloModeQuery_Ctor) == MH_OK) {
+                Log("CSWGuiInGameSoloModeQuery_Ctor hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CSWGuiInGameAreaTransition_Ctor = (void*)(0x8b82e0);
+    if (MH_CreateHook(targetAddr_CSWGuiInGameAreaTransition_Ctor, &Hook_CSWGuiInGameAreaTransition_Ctor,
+        (LPVOID*)&g_originalCSWGuiInGameAreaTransition_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiInGameAreaTransition_Ctor) == MH_OK) {
+                Log("CSWGuiInGameAreaTransition_Ctor hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CSWGuiInGameMessages_Ctor = (void*)(0x757c40);
+    if (MH_CreateHook(targetAddr_CSWGuiInGameMessages_Ctor, &Hook_CSWGuiInGameMessages_Ctor,
+        (LPVOID*)&g_originalCSWGuiInGameMessages_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiInGameMessages_Ctor) == MH_OK) {
+                Log("CSWGuiInGameMessages_Ctor hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CSWGuiStore_Ctor = (void*)(0x8b4270);
+    if (MH_CreateHook(targetAddr_CSWGuiStore_Ctor, &Hook_CSWGuiStore_Ctor,
+        (LPVOID*)&g_originalCSWGuiStore_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiStore_Ctor) == MH_OK) {
+                Log("CSWGuiStore_Ctor hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CSWGuiInGameEquip_Ctor = (void*)(0x8a92d0);
+    if (MH_CreateHook(targetAddr_CSWGuiInGameEquip_Ctor, &Hook_CSWGuiInGameEquip_Ctor,
+        (LPVOID*)&g_originalCSWGuiInGameEquip_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiInGameEquip_Ctor) == MH_OK) {
+                Log("CSWGuiInGameEquip_Ctor hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CSWGuiInGameInventory_Ctor = (void*)(0x8a6170);
+    if (MH_CreateHook(targetAddr_CSWGuiInGameInventory_Ctor, &Hook_CSWGuiInGameInventory_Ctor,
+        (LPVOID*)&g_originalCSWGuiInGameInventory_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiInGameInventory_Ctor) == MH_OK) {
+                Log("CSWGuiInGameInventory_Ctor hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CSWGuiInGameCharacter_Ctor = (void*)(0x84c3a0);
+    if (MH_CreateHook(targetAddr_CSWGuiInGameCharacter_Ctor, &Hook_CSWGuiInGameCharacter_Ctor,
+        (LPVOID*)&g_originalCSWGuiInGameCharacter_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiInGameCharacter_Ctor) == MH_OK) {
+                Log("CSWGuiInGameCharacter_Ctor hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CSWGuiStatusSummary_Ctor = (void*)(0x75cec0);
+    if (MH_CreateHook(targetAddr_CSWGuiStatusSummary_Ctor, &Hook_CSWGuiStatusSummary_Ctor,
+        (LPVOID*)&g_originalCSWGuiStatusSummary_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiStatusSummary_Ctor) == MH_OK) {
+                Log("CSWGuiStatusSummary_Ctor hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CSWGuiInGameMap_Ctor = (void*)(0x893950);
+    if (MH_CreateHook(targetAddr_CSWGuiInGameMap_Ctor, &Hook_CSWGuiInGameMap_Ctor,
+        (LPVOID*)&g_originalCSWGuiInGameMap_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiInGameMap_Ctor) == MH_OK) {
+                Log("CSWGuiInGameMap_Ctor hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CSWGuiInGameAbilities_Ctor = (void*)(0x8a25c0);
+    if (MH_CreateHook(targetAddr_CSWGuiInGameAbilities_Ctor, &Hook_CSWGuiInGameAbilities_Ctor,
+        (LPVOID*)&g_originalCSWGuiInGameAbilities_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiInGameAbilities_Ctor) == MH_OK) {
+                Log("CSWGuiInGameAbilities_Ctor hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CSWGuiInGameJournal_Ctor = (void*)(0x7fae60);
+    if (MH_CreateHook(targetAddr_CSWGuiInGameJournal_Ctor, &Hook_CSWGuiInGameJournal_Ctor,
+        (LPVOID*)&g_originalCSWGuiInGameJournal_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiInGameJournal_Ctor) == MH_OK) {
+                Log("CSWGuiInGameJournal_Ctor hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CSWGuiInGameOptions_Ctor = (void*)(0x8a1170);
+    if (MH_CreateHook(targetAddr_CSWGuiInGameOptions_Ctor, &Hook_CSWGuiInGameOptions_Ctor,
+        (LPVOID*)&g_originalCSWGuiInGameOptions_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiInGameOptions_Ctor) == MH_OK) {
+                Log("CSWGuiInGameOptions_Ctor hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CSWGuiPartySelection_Ctor = (void*)(0x89cf30);
+    if (MH_CreateHook(targetAddr_CSWGuiPartySelection_Ctor, &Hook_CSWGuiPartySelection_Ctor,
+        (LPVOID*)&g_originalCSWGuiPartySelection_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiPartySelection_Ctor) == MH_OK) {
+                Log("CSWGuiPartySelection_Ctor hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CSWGuiInGameGalaxyMap_Ctor = (void*)(0x8973d0);
+    if (MH_CreateHook(targetAddr_CSWGuiInGameGalaxyMap_Ctor, &Hook_CSWGuiInGameGalaxyMap_Ctor,
+        (LPVOID*)&g_originalCSWGuiInGameGalaxyMap_Ctor) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiInGameGalaxyMap_Ctor) == MH_OK) {
+                Log("CSWGuiInGameGalaxyMap_Ctor hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
 
     void* targetAddr_LoadingScreenUpdateFrame = (void*)(0x409ed0); //Just putting in actual address
     if (MH_CreateHook(targetAddr_LoadingScreenUpdateFrame, &Hook_LoadingScreenUpdateFrame, 

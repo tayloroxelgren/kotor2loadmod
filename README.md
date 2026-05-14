@@ -124,6 +124,27 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 |`FUN_00711750` | **ResourceLoader** | Main function that loads resources | no |
 |`FUN_00711690` | **ResourceLoaderWrapper** | Wrapper for resource loader | no |
 |`FUN_0040fe60` | **SetResourceStateAndTriggerUpdate** | Toggles a state flag for a resource and, if the flag is enabled, triggers a batch update and logging process. | no |
+|`FUN_008bdc90` | **CSWGuiBarkBubble_Ctor** | Constructs the bark bubble overlay — the small floating speech bubble that appears above characters during ambient dialogue. Minimal setup: sets vftable, initializes a single text label. | yes |
+|`FUN_0075ae40` | **CSWGuiMessageBox_Ctor** | Constructs a general-purpose modal confirmation dialog (OK/Cancel). Used for confirmations throughout the game UI. Also invoked as the base constructor for CSWGuiControllerLossBox and CSWGuiTutorialBox. | yes |
+|`FUN_0075b370` | **CSWGuiMessageBoxVariant_Ctor** | Variant of CSWGuiMessageBox_Ctor that supports datapad-style messages with a slightly different layout. | yes |
+|`FUN_008ba980` | **CSWGuiDialogLetterbox_Ctor** | Constructs the letterbox overlay used during cinematic dialogue sequences (black bars top/bottom). Extremely lightweight — sets vftable and zero-initializes 168 bytes. Reports 0μs in practice. | yes |
+|`FUN_007bc600` | **CSWGuiFade_Ctor** | Constructs the screen-fade overlay GUI element. Loads the "fade_p" resource and initializes the fade state. Low cost (~0.3ms per load). | yes |
+|`FUN_00754ed0` | **CSWGuiInGameMenu_Ctor** | Constructs the main in-game pause/options menu. Sets up 50+ UI elements including labels, buttons, and status bars. One of the heavier non-conditional constructors at ~21ms per load. | yes |
+|`FUN_008b91f0` | **CSWGuiInGamePause_Ctor** | Constructs the pause-screen overlay (displays pause reason label and unpause button). Moderate cost at ~4ms per load. | yes |
+|`FUN_008b8c40` | **CSWGuiInGameSoloModeQuery_Ctor** | Constructs the solo-mode confirmation dialog shown when switching party members in/out. Uses a base dialog template. Moderate cost at ~15ms per load. | yes |
+|`FUN_008b82e0` | **CSWGuiInGameAreaTransition_Ctor** | Constructs the area-transition notification screen (displays location name on area change). Loads the "areatrans_p" resource template. Low cost at ~3ms per load. | yes |
+|`FUN_00757c40` | **CSWGuiInGameMessages_Ctor** | Constructs the in-game combat log / message display. Initializes 6 message bars and 6 filter buttons. Called twice per load (conditional on DAT_00a10760). Total ~18ms per load. | yes |
+|`FUN_008b4270` | **CSWGuiStore_Ctor** | Constructs the merchant/shop UI with 20+ elements for buying and selling items. Conditional on DAT_00a10760. Costs ~18ms per load. | yes |
+|`FUN_008a92d0` | **CSWGuiInGameEquip_Ctor** | Constructs the character equipment screen. Initializes 11 weapon slots, all equipment list slots, and 50+ UI labels. Conditional on DAT_00a10760. Costs ~14ms per load. | yes |
+|`FUN_008a6170` | **CSWGuiInGameInventory_Ctor** | Constructs the player inventory/item management screen with 15 filter buttons and item category lists. Conditional on DAT_00a10760. Costs ~4ms per load. | yes |
+|`FUN_0084c3a0` | **CSWGuiInGameCharacter_Ctor** | Constructs the full character sheet UI: stats, attributes, skills, alignment, saving throws — 80+ UI labels total. Conditional on DAT_00a10760. Second most expensive constructor at ~55ms per load. | yes |
+|`FUN_0075cec0` | **CSWGuiStatusSummary_Ctor** | Constructs the status summary / journal overview panel with 20+ status labels. Costs ~3ms per load. | yes |
+|`FUN_00893950` | **CSWGuiInGameMap_Ctor** | Constructs the local area map display including map rendering surface and navigation buttons. Conditional on DAT_00a10760. Low cost at ~2ms per load. | yes |
+|`FUN_008a25c0` | **CSWGuiInGameAbilities_Ctor** | Constructs the abilities/feats/powers/skills screen with 10 category tabs and 70+ UI elements. Conditional on DAT_00a10760. **Dominant bottleneck — ~308ms per load, nearly 50% of ModuleChunkLoadCore's total time.** | yes |
+|`FUN_007fae60` | **CSWGuiInGameJournal_Ctor** | Constructs the player journal screen and allocates its internal message data structure. Conditional on DAT_00a10760. Low cost at ~5ms per load. | yes |
+|`FUN_008a1170` | **CSWGuiInGameOptions_Ctor** | Constructs the in-game options menu (load/save/quit/settings). 8+ menu options. Conditional on DAT_00a10760. Low cost at ~4ms per load. | yes |
+|`FUN_0089cf30` | **CSWGuiPartySelection_Ctor** | Constructs the party member selection screen with 12 party slots and a 3D character preview. Conditional on DAT_00a10760. Moderate cost at ~7ms per load. | yes |
+|`FUN_008973d0` | **CSWGuiInGameGalaxyMap_Ctor** | Constructs the galaxy/world map with dual 3D scene views and 16 planet buttons. Conditional on DAT_00a10760. Third most expensive constructor at ~42ms per load. | yes |
 |`FUN_00411170` | **UpdateObjectCollectionsAndTrace** | Iterates through collections of objects, updates their state, and logs the process | no |
 |`FUN_00715c00` | **Worker_ProcessJob** | Main worker-side job processor that runs after the thread is resumed, likely consuming the shared job fields and performing the actual resource lookup/loading work before the worker goes idle again. | no |
 |`FUN_00711600` | **Worker_SubmitJob** | Waits for the worker slot to become free, writes job parameters into the shared worker state, marks the worker busy, and wakes the suspended worker thread. | no |
@@ -131,6 +152,7 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 |`FUN_00638bd0` | **GameSaveLoad_Core** | The central dispatcher for the save/load state machine. It coordinates high-level transitions (New Game, Save, or Area Load) by driving the mass-serialization of Gob objects via CExoStats routines. Once data is gathered, it hands the resulting GFF packets to the streaming system via Worker_SubmitJob to be written to disk. | no |
 |`FUN_0065f8a0` | **NetPacketMajorDispatcher** | A high-level packet router that parses incoming "p-prefix" buffers. It identifies the packet's Major Type and dispatches it to the appropriate subsystem handler (e.g., Inventory, Dialog, or CharList). It includes strict overflow/underflow checks and wraps every dispatch in a Tracer logging block | no |
 |`FUN_0048b6f0` | **Mesh_ParseMaterialAndGeometry** | A high-level material state machine that maps textures (texture0/1), defines mesh buffers (verts, colors, faces), and calculates real-time UV transformations for animated effects like scrolling or jitter. | no |
+|`FUN_0093b650` | **VFS_RegisterHandlers** | The core initialization routine for the Virtual File System (VFS). It populates a global table of function pointers that define the engine's I/O interface, including file discovery, metadata retrieval, and archive management. | no |
 
 ### Classes
 - `0x009AA224`  **CSWGuiMainCharGen::vftable**: Seems to be the class for character creation
@@ -140,6 +162,7 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 - `0x0099493c`  **CSWSModule::vftable::vftable**: Module class
 - `0x00992398`  **CServerExoApp::vftable**: The virtual function table for the internal game server. This class manages the world simulation "heartbeat," background task scheduling via the Microsoft Concurrency Runtime, and serves as the primary owner of the world logic that receives and processes network packets from the client.
 
+### Ring buffer connects client and server arch?
 
 ### Code Paths
 - ProcessResourceQueue
@@ -153,9 +176,20 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
                     - ModuleChunkLoadCore
                         - InitializeGameUI
 
-#### Currently going through the phases of ModuleChunkLoadCore based on phases around calls to `LoadingScreenUpdateFrame`
-- Phase 0: Negligible cost. Initial debug/bootstrap GUI setup does not materially contribute to total load time.
-- Phase 1:  Low impact overall. This phase appears to be dominated by small GUI constructor and allocation work, but does not account for a meaningful portion of time.
+#### ModuleChunkLoadCore phase breakdown (~628ms avg per call)
+All GUI constructors are now fully attributed. The 5 `LoadingScreenUpdateFrame` calls divide the function into 4 phases:
+
+**Phase 0** (~0ms): Debug/bootstrap GUI only — DebugMenuConstructor, CSWGuiLoadModuleDebugMenu_Ctor, CSWGuiPowersFeatsSkillsDebugMenu_Ctor. All report 0μs. Negligible.
+
+**Phase 1** (~50ms): Small GUI constructors — CSWGuiCreateDebugItemSubMenu_Ctor (5ms), CSWGuiExamine_Ctor (<1ms), CSWGuiBarkBubble_Ctor (<1ms), CSWGuiContainer_Ctor (6ms), CSWGuiDialogCinematic_Ctor (<1ms), CSWGuiDialogComputer_Ctor, CSWGuiDialogComputerCamera_Ctor (<1ms), CSWGuiMessageBox_Ctor (16ms total across calls), CSWGuiSkillInfoBox_Ctor (1ms), CSWGuiTutorialBox_Ctor.
+
+**Phase 2** (~96ms): Medium-weight in-game screen constructors — CSWGuiInGameMenu_Ctor (21ms), CSWGuiStore_Ctor (18ms), CSWGuiInGameMessages_Ctor (18ms, 2 calls), CSWGuiInGameSoloModeQuery_Ctor (15ms), CSWGuiInGameEquip_Ctor (14ms), CSWGuiInGameInventory_Ctor (4ms), CSWGuiInGamePause_Ctor (4ms), CSWGuiInGameAreaTransition_Ctor (3ms), CSWGuiFade_Ctor (<1ms), CSWGuiDialogLetterbox_Ctor (0ms).
+
+**Phase 3** (~140ms): CSWGuiInGameCharacter_Ctor (55ms), CSWGuiStatusSummary_Ctor (3ms), then InitializeGameUI (82ms).
+
+**Phase 4** (~369ms — dominant): **CSWGuiInGameAbilities_Ctor (308ms, ~49% of total ModuleChunkLoadCore time)**, CSWGuiInGameGalaxyMap_Ctor (43ms), CSWGuiPartySelection_Ctor (7ms), CSWGuiInGameJournal_Ctor (5ms), CSWGuiInGameOptions_Ctor (4ms), CSWGuiInGameMap_Ctor (2ms).
+
+**Attribution: ~635ms of the 628ms average is now explained.** The primary optimization target is `CSWGuiInGameAbilities_Ctor` — it alone accounts for nearly half of all ModuleChunkLoadCore time and warrants deeper investigation into what it is loading during construction.
 
 ## Build Instructions
 Download [MinHook](https://github.com/TsudaKageyu/minhook)

@@ -2,6 +2,7 @@
 minhook/
 oldstuff/
 timelogs/
+.claude/
 *.exp
 *.lib
 *.dll

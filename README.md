@@ -6,7 +6,6 @@ The mod is in early development, but some small improvements have been made
 
 ### Improvements
 - Initial spalsh screens have been skipped by no oping `PreloadInitialAssetsWrapper`
-- No oping `LoadingScreenUpdateFrame` when it is called from `ModuleChunkLoadCore`
 
 #### Estimated Loading improvment at about: 3%
 

@@ -301,6 +301,12 @@ uint32_t __cdecl Hook_GameObjUpdate(byte param1){
 
 thread_local int g_moduleChunkLoadCoreDepth = 0;
 
+// Game's own _free (0x0091c6b5), matched to the _malloc inside AllocateMemoryOrThrow.
+// Used to release pre-allocated blocks that we skip constructing, avoiding heap leaks.
+// Must use the game's CRT free — calling our DLL's free on game-malloc'd memory corrupts the heap.
+typedef void (*GameFree_t)(void*);
+static const GameFree_t GameFree = (GameFree_t)(0x0091c6b5);
+
 typedef uint32_t (__fastcall* ModuleChunkLoadCorePtr_t)(int param1);
 ModuleChunkLoadCorePtr_t g_originalModuleChunkLoadCore = nullptr;
 
@@ -888,6 +894,32 @@ void* __cdecl Hook_OpenOrStreamGameFile(char *param1, char *param2, uint32_t *pa
     Log("OpenOrStreamGameFile: " + std::to_string(duration.count()) + " μs");
 
     return result;
+}
+
+typedef void (__fastcall* GUI_BindNamedWidgetPtr_t)(int thisPtr, void* edxDummy, int* param1, unsigned int param2, int param3, int param4);
+GUI_BindNamedWidgetPtr_t g_originalGUI_BindNamedWidget = nullptr;
+
+void __fastcall Hook_GUI_BindNamedWidget(int thisPtr, void* edxDummy, int* param1, unsigned int param2, int param3, int param4){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalGUI_BindNamedWidget(thisPtr, edxDummy, param1, param2, param3, param4);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("GUI_BindNamedWidget: " + std::to_string(duration.count()) + " μs");
+}
+
+typedef void (__fastcall* GUI_InitWidgetFromGFFPtr_t)(int* thisPtr, void* edxDummy, int param2, int param3);
+GUI_InitWidgetFromGFFPtr_t g_originalGUI_InitWidgetFromGFF = nullptr;
+
+void __fastcall Hook_GUI_InitWidgetFromGFF(int* thisPtr, void* edxDummy, int param2, int param3){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalGUI_InitWidgetFromGFF(thisPtr, edxDummy, param2, param3);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("GUI_InitWidgetFromGFF: " + std::to_string(duration.count()) + " μs");
 }
 
 void InstallHook() {
@@ -1524,7 +1556,7 @@ void InstallHook() {
         }
 
     void* targetAddr_OpenOrStreamGameFile = (void*)(0x475ab0);
-    if (MH_CreateHook(targetAddr_OpenOrStreamGameFile, &Hook_OpenOrStreamGameFile, 
+    if (MH_CreateHook(targetAddr_OpenOrStreamGameFile, &Hook_OpenOrStreamGameFile,
         (LPVOID*)&g_originalOpenOrStreamGameFile) == MH_OK) {
             if (MH_EnableHook(targetAddr_OpenOrStreamGameFile) == MH_OK) {
                 Log("OpenOrStreamGameFile hook installed successfully");
@@ -1534,6 +1566,22 @@ void InstallHook() {
         } else {
             Log("Failed to create hook");
         }
+
+    void* targetAddr_GUI_BindNamedWidget = (void*)(0x0040f620);
+    if (MH_CreateHook(targetAddr_GUI_BindNamedWidget, &Hook_GUI_BindNamedWidget,
+        (LPVOID*)&g_originalGUI_BindNamedWidget) == MH_OK) {
+            if (MH_EnableHook(targetAddr_GUI_BindNamedWidget) == MH_OK) {
+                Log("GUI_BindNamedWidget hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_GUI_InitWidgetFromGFF = (void*)(0x0040ee40);
+    if (MH_CreateHook(targetAddr_GUI_InitWidgetFromGFF, &Hook_GUI_InitWidgetFromGFF,
+        (LPVOID*)&g_originalGUI_InitWidgetFromGFF) == MH_OK) {
+            if (MH_EnableHook(targetAddr_GUI_InitWidgetFromGFF) == MH_OK) {
+                Log("GUI_InitWidgetFromGFF hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
 
 
 }

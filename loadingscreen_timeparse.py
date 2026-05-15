@@ -91,6 +91,8 @@ def main():
         ("CSWGuiInGameOptions_Ctor", re.compile(r'CSWGuiInGameOptions_Ctor:\s*(\d+)\s*μs')),
         ("CSWGuiPartySelection_Ctor", re.compile(r'CSWGuiPartySelection_Ctor:\s*(\d+)\s*μs')),
         ("CSWGuiInGameGalaxyMap_Ctor", re.compile(r'CSWGuiInGameGalaxyMap_Ctor:\s*(\d+)\s*μs')),
+        ("GUI_InitWidgetFromGFF", re.compile(r'GUI_InitWidgetFromGFF:\s*(\d+)\s*μs')),
+        ("GUI_BindNamedWidget", re.compile(r'GUI_BindNamedWidget:\s*(\d+)\s*μs')),
     ]
 
     for name, p in patterns:

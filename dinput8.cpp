@@ -3,13 +3,12 @@
 #include <string>
 #include <chrono>
 #include "minhook/include/MinHook.h"
-#include <unordered_map>
-#include <mutex>
-#include <unordered_set>
-#include <atomic>
 #include <Windows.h>
 
 #define LOGGING_ENABLED 1
+#define LOG_LOADSCREEN_ONLY 1
+#define SKIP_PRELOAD_INITIAL_ASSETS_WRAPPER 1
+#define SKIP_LOADING_SCREEN_UPDATE_FRAME_IN_MODULE_CHUNK_LOAD_CORE 1
 
 // DirectInput8 proxy
 typedef HRESULT(WINAPI *DICREATE)(HINSTANCE, DWORD, REFIID, LPVOID*, LPUNKNOWN);
@@ -17,9 +16,22 @@ static DICREATE realCreate = nullptr;
 
 // Simple logging
 std::ofstream g_logFile;
+
+bool LogHasPrefix(const std::string& msg, const char* prefix) {
+    return msg.compare(0, std::strlen(prefix), prefix) == 0;
+}
+
+bool ShouldLogMessage(const std::string& msg) {
+#if LOG_LOADSCREEN_ONLY
+    return LogHasPrefix(msg, "loadingscreen:");
+#else
+    return true;
+#endif
+}
+
 void Log(const std::string& msg) {
     if(LOGGING_ENABLED){
-        if (g_logFile.is_open()) {
+        if (g_logFile.is_open() && ShouldLogMessage(msg)) {
             SYSTEMTIME st;
             GetSystemTime(&st);
             g_logFile << st.wHour << ":" << st.wMinute << ":" << st.wSecond 
@@ -223,7 +235,11 @@ PreloadInitialAssetsWrapperPtr_t g_originalPreloadInitialAssetsWrapperPtr=nullpt
 
 // Skips splash screens
 void __fastcall Hook_PreloadInitialAssetsWrapper(uint32_t param1){
+#if SKIP_PRELOAD_INITIAL_ASSETS_WRAPPER
     return;
+#else
+    g_originalPreloadInitialAssetsWrapperPtr(param1);
+#endif
 }
 
 typedef void (__fastcall* FlushTracerPtr_t)(int *param1);
@@ -699,17 +715,21 @@ LoadingScreenUpdateFramePtr_t g_originalLoadingScreenUpdateFrame=nullptr;
 
 void __cdecl Hook_LoadingScreenUpdateFrame(uint32_t param1,int param2,int param3){
     auto start = std::chrono::high_resolution_clock::now();
-    
-    bool calledFromModuleChunkLoadCore = (g_moduleChunkLoadCoreDepth > 0);
 
-    // Skipping LoadingScreenUpdateFrame when called from ModuleChunkLoadCore with param2 == 0, as this seems to be a redundant
-    if (calledFromModuleChunkLoadCore && param2 == 0) {
+#if SKIP_LOADING_SCREEN_UPDATE_FRAME_IN_MODULE_CHUNK_LOAD_CORE
+    bool calledFromModuleChunkLoadCore = (g_moduleChunkLoadCoreDepth > 0);
+    // Skipping LoadingScreenUpdateFrame when called from ModuleChunkLoadCore with param2 == 0, as this seems to be redundant.
+    bool skipLoadingScreenUpdate = calledFromModuleChunkLoadCore && param2 == 0;
+
+    if (skipLoadingScreenUpdate) {
         Log("LoadingScreenUpdateFrame: skipped inside ModuleChunkLoadCore");
     }
     else{
         g_originalLoadingScreenUpdateFrame(param1, param2, param3);
     }
-
+#else
+    g_originalLoadingScreenUpdateFrame(param1, param2, param3);
+#endif
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -894,6 +914,19 @@ void* __cdecl Hook_OpenOrStreamGameFile(char *param1, char *param2, uint32_t *pa
     Log("OpenOrStreamGameFile: " + std::to_string(duration.count()) + " μs");
 
     return result;
+}
+
+typedef void (__fastcall* GUI_FindAndBindControlByTagPtr_t)(int thisPtr, void* edxDummy, int param1, int gffPtr, int controlsListPtr, void* requestedTag);
+GUI_FindAndBindControlByTagPtr_t g_originalGUI_FindAndBindControlByTag = nullptr;
+
+void __fastcall Hook_GUI_FindAndBindControlByTag(int thisPtr, void* edxDummy, int param1, int gffPtr, int controlsListPtr, void* requestedTag) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalGUI_FindAndBindControlByTag(thisPtr, edxDummy, param1, gffPtr, controlsListPtr, requestedTag);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("GUI_FindAndBindControlByTag: " + std::to_string(duration.count()) + " μs");
 }
 
 typedef void (__fastcall* GUI_BindNamedWidgetPtr_t)(int thisPtr, void* edxDummy, int* param1, unsigned int param2, int param3, int param4);
@@ -1566,6 +1599,14 @@ void InstallHook() {
         } else {
             Log("Failed to create hook");
         }
+
+    void* targetAddr_GUI_FindAndBindControlByTag = (void*)(0x00418df0);
+    if (MH_CreateHook(targetAddr_GUI_FindAndBindControlByTag, &Hook_GUI_FindAndBindControlByTag,
+        (LPVOID*)&g_originalGUI_FindAndBindControlByTag) == MH_OK) {
+            if (MH_EnableHook(targetAddr_GUI_FindAndBindControlByTag) == MH_OK) {
+                Log("GUI_FindAndBindControlByTag hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
 
     void* targetAddr_GUI_BindNamedWidget = (void*)(0x0040f620);
     if (MH_CreateHook(targetAddr_GUI_BindNamedWidget, &Hook_GUI_BindNamedWidget,

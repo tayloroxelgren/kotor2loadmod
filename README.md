@@ -7,7 +7,7 @@ The mod is in early development, but some small improvements have been made
 ### Improvements
 - Initial spalsh screens have been skipped by no oping `PreloadInitialAssetsWrapper`
 
-#### Estimated Loading improvment at about: 3%
+#### Estimated Loading improvment at about: 0%
 
 ## Installation
 Just copy the `dinput8.dll` into the same directory as your swkotor2.exe

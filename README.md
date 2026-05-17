@@ -185,20 +185,29 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
                     - ModuleChunkLoadCore
                         - InitializeGameUI
 
-#### ModuleChunkLoadCore phase breakdown (~628ms avg per call)
-All GUI constructors are now fully attributed. The 5 `LoadingScreenUpdateFrame` calls divide the function into 4 phases:
+#### ModuleChunkLoadCore timing read, 2026-05-17 run (~303ms avg per call)
+`ModuleChunkLoadCore` totals 1212.92ms over 4 calls, averaging 303.23ms per call. 
 
-**Phase 0** (~0ms): Debug/bootstrap GUI only — DebugMenuConstructor, CSWGuiLoadModuleDebugMenu_Ctor, CSWGuiPowersFeatsSkillsDebugMenu_Ctor. All report 0μs. Negligible.
+The strongest current signal is the repeated GUI binding path:
 
-**Phase 1** (~50ms): Small GUI constructors — CSWGuiCreateDebugItemSubMenu_Ctor (5ms), CSWGuiExamine_Ctor (<1ms), CSWGuiBarkBubble_Ctor (<1ms), CSWGuiContainer_Ctor (6ms), CSWGuiDialogCinematic_Ctor (<1ms), CSWGuiDialogComputer_Ctor, CSWGuiDialogComputerCamera_Ctor (<1ms), CSWGuiMessageBox_Ctor (16ms total across calls), CSWGuiSkillInfoBox_Ctor (1ms), CSWGuiTutorialBox_Ctor.
+- `GUI_BindNamedWidget`: 333.29ms total over 2400 calls, averaging 0.14ms per call.
+- `GUI_FindAndBindControlByTag`: 293.41ms total over 2400 calls, averaging 0.12ms per call.
 
-**Phase 2** (~96ms): Medium-weight in-game screen constructors — CSWGuiInGameMenu_Ctor (21ms), CSWGuiStore_Ctor (18ms), CSWGuiInGameMessages_Ctor (18ms, 2 calls), CSWGuiInGameSoloModeQuery_Ctor (15ms), CSWGuiInGameEquip_Ctor (14ms), CSWGuiInGameInventory_Ctor (4ms), CSWGuiInGamePause_Ctor (4ms), CSWGuiInGameAreaTransition_Ctor (3ms), CSWGuiFade_Ctor (<1ms), CSWGuiDialogLetterbox_Ctor (0ms).
+These two numbers are nested, not additive. `GUI_BindNamedWidget` calls `GUI_FindAndBindControlByTag` first, then performs position/size scaling, `LBL_BAR*` special handling, and control registration. The high total is mostly from call volume: roughly 600 named widget binds per `ModuleChunkLoadCore` call.
 
-**Phase 3** (~140ms): CSWGuiInGameCharacter_Ctor (55ms), CSWGuiStatusSummary_Ctor (3ms), then InitializeGameUI (82ms).
+Current call shape:
 
-**Phase 4** (~369ms — dominant): **CSWGuiInGameAbilities_Ctor (308ms, ~49% of total ModuleChunkLoadCore time)**, CSWGuiInGameGalaxyMap_Ctor (43ms), CSWGuiPartySelection_Ctor (7ms), CSWGuiInGameJournal_Ctor (5ms), CSWGuiInGameOptions_Ctor (4ms), CSWGuiInGameMap_Ctor (2ms).
+- `ModuleChunkLoadCore`
+    - constructs many GUI screens and panels
+    - calls `InitializeGameUI`
+    - each screen constructor / `InitializeGameUI` loads a GUI layout and binds named controls
+        - `GUI_BindNamedWidget`
+            - `GUI_FindAndBindControlByTag`
+                - linear scans the GFF `CONTROLS` list and compares each child `TAG`
 
-**Attribution: ~635ms of the 628ms average is now explained.** The primary optimization target is `CSWGuiInGameAbilities_Ctor` — it alone accounts for nearly half of all ModuleChunkLoadCore time and warrants deeper investigation into what it is loading during construction.
+Highest named constructor in the current run is `CSWGuiInGameCharacter_Ctor` at 110.98ms total / 27.75ms avg. The broader `LoadingScreenUpdateFrame`, `ProcessResourceQueue`, and packet-handler timings include nested work and calls outside `ModuleChunkLoadCore`, so they should not be treated as exclusive child costs of this function without interval-aware tracing.
+
+Working hypothesis: `ModuleChunkLoadCore` is not slow because one constructor is catastrophically expensive. It is slow because it eagerly pre-warms a large amount of UI and repeatedly resolves named controls by scanning GFF layout data.
 
 ## Build Instructions
 Download [MinHook](https://github.com/TsudaKageyu/minhook)

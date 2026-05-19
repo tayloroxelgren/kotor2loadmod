@@ -3,6 +3,7 @@ minhook/
 oldstuff/
 timelogs/
 .claude/
+__pycache__/
 *.exp
 *.lib
 *.dll

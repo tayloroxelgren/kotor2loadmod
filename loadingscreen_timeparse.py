@@ -94,6 +94,14 @@ def main():
         ("GUI_InitWidgetFromGFF", re.compile(r'GUI_InitWidgetFromGFF:\s*(\d+)\s*μs')),
         ("GUI_FindAndBindControlByTag", re.compile(r'GUI_FindAndBindControlByTag:\s*(\d+)\s*μs')),
         ("GUI_BindNamedWidget", re.compile(r'GUI_BindNamedWidget:\s*(\d+)\s*μs')),
+        ("ResourceEnsureLoaded", re.compile(r'ResourceEnsureLoaded:\s*(\d+)\s*μs')),
+        ("ResourceLoadFromArchiveSlot", re.compile(r'ResourceLoadFromArchiveSlot:\s*(\d+)\s*μs')),
+        ("ResourceLoadMemoryBacked", re.compile(r'ResourceLoadMemoryBacked:\s*(\d+)\s*μs')),
+        ("ResourceLoadFromArchive", re.compile(r'ResourceLoadFromArchive:\s*(\d+)\s*μs')),
+        ("ResourceLoadFromLooseFile", re.compile(r'ResourceLoadFromLooseFile:\s*(\d+)\s*μs')),
+        ("LooseFileOpen", re.compile(r'LooseFileOpen:\s*(\d+)\s*μs')),
+        ("LooseFileRead", re.compile(r'LooseFileRead:\s*(\d+)\s*μs')),
+        ("ResourceFinalizeAsyncLoad", re.compile(r'ResourceFinalizeAsyncLoad:\s*(\d+)\s*μs')),
     ]
 
     for name, p in patterns:

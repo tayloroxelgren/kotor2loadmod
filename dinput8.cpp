@@ -6,7 +6,7 @@
 #include <Windows.h>
 
 #define LOGGING_ENABLED 1
-#define LOG_LOADSCREEN_ONLY 1
+#define LOG_LOADSCREEN_ONLY 0
 #define SKIP_PRELOAD_INITIAL_ASSETS_WRAPPER 1
 #define SKIP_LOADING_SCREEN_UPDATE_FRAME_IN_MODULE_CHUNK_LOAD_CORE 0
 
@@ -955,6 +955,118 @@ void __fastcall Hook_GUI_InitWidgetFromGFF(int* thisPtr, void* edxDummy, int par
     Log("GUI_InitWidgetFromGFF: " + std::to_string(duration.count()) + " μs");
 }
 
+typedef uint32_t (__thiscall* ResourceEnsureLoadedPtr_t)(int thisPtr, int resourceEntry);
+ResourceEnsureLoadedPtr_t g_originalResourceEnsureLoaded = nullptr;
+
+uint32_t __fastcall Hook_ResourceEnsureLoaded(int thisPtr, void* edxDummy, int resourceEntry) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t result = g_originalResourceEnsureLoaded(thisPtr, resourceEntry);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("ResourceEnsureLoaded: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef int (__thiscall* ResourceLoadFromArchiveSlotPtr_t)(int thisPtr, int* resourceEntry, int asyncFlag);
+ResourceLoadFromArchiveSlotPtr_t g_originalResourceLoadFromArchiveSlot = nullptr;
+
+int __fastcall Hook_ResourceLoadFromArchiveSlot(int thisPtr, void* edxDummy, int* resourceEntry, int asyncFlag) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    int result = g_originalResourceLoadFromArchiveSlot(thisPtr, resourceEntry, asyncFlag);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("ResourceLoadFromArchiveSlot: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t (__thiscall* ResourceLoadMemoryBackedPtr_t)(int thisPtr, int* resourceEntry, int unusedFlag);
+ResourceLoadMemoryBackedPtr_t g_originalResourceLoadMemoryBacked = nullptr;
+
+uint32_t __fastcall Hook_ResourceLoadMemoryBacked(int thisPtr, void* edxDummy, int* resourceEntry, int unusedFlag) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t result = g_originalResourceLoadMemoryBacked(thisPtr, resourceEntry, unusedFlag);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("ResourceLoadMemoryBacked: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef int (__thiscall* ResourceLoadFromArchivePtr_t)(int thisPtr, int* resourceEntry, int asyncFlag);
+ResourceLoadFromArchivePtr_t g_originalResourceLoadFromArchive = nullptr;
+
+int __fastcall Hook_ResourceLoadFromArchive(int thisPtr, void* edxDummy, int* resourceEntry, int asyncFlag) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    int result = g_originalResourceLoadFromArchive(thisPtr, resourceEntry, asyncFlag);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("ResourceLoadFromArchive: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef int (__thiscall* ResourceLoadFromLooseFilePtr_t)(int thisPtr, int* resourceEntry, int asyncFlag);
+ResourceLoadFromLooseFilePtr_t g_originalResourceLoadFromLooseFile = nullptr;
+
+int __fastcall Hook_ResourceLoadFromLooseFile(int thisPtr, void* edxDummy, int* resourceEntry, int asyncFlag) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    int result = g_originalResourceLoadFromLooseFile(thisPtr, resourceEntry, asyncFlag);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("ResourceLoadFromLooseFile: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t* (__thiscall* LooseFileOpenPtr_t)(uint32_t* thisPtr, uint32_t param1, uint16_t param2, uint32_t param3);
+LooseFileOpenPtr_t g_originalLooseFileOpen = nullptr;
+
+uint32_t* __fastcall Hook_LooseFileOpen(uint32_t* thisPtr, void* edxDummy, uint32_t param1, uint16_t param2, uint32_t param3) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t* result = g_originalLooseFileOpen(thisPtr, param1, param2, param3);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("LooseFileOpen: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef int (__thiscall* LooseFileReadPtr_t)(int* thisPtr, void* buffer, size_t elementSize, size_t elementCount);
+LooseFileReadPtr_t g_originalLooseFileRead = nullptr;
+
+int __fastcall Hook_LooseFileRead(int* thisPtr, void* edxDummy, void* buffer, size_t elementSize, size_t elementCount) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    int result = g_originalLooseFileRead(thisPtr, buffer, elementSize, elementCount);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("LooseFileRead: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t (__thiscall* ResourceFinalizeAsyncLoadPtr_t)(int thisPtr);
+ResourceFinalizeAsyncLoadPtr_t g_originalResourceFinalizeAsyncLoad = nullptr;
+
+uint32_t __fastcall Hook_ResourceFinalizeAsyncLoad(int thisPtr, void* edxDummy) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t result = g_originalResourceFinalizeAsyncLoad(thisPtr);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("ResourceFinalizeAsyncLoad: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
 void InstallHook() {
     
     if (MH_Initialize() != MH_OK) {
@@ -1621,6 +1733,70 @@ void InstallHook() {
         (LPVOID*)&g_originalGUI_InitWidgetFromGFF) == MH_OK) {
             if (MH_EnableHook(targetAddr_GUI_InitWidgetFromGFF) == MH_OK) {
                 Log("GUI_InitWidgetFromGFF hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_ResourceEnsureLoaded = (void*)(0x711c20);
+    if (MH_CreateHook(targetAddr_ResourceEnsureLoaded, &Hook_ResourceEnsureLoaded,
+        (LPVOID*)&g_originalResourceEnsureLoaded) == MH_OK) {
+            if (MH_EnableHook(targetAddr_ResourceEnsureLoaded) == MH_OK) {
+                Log("ResourceEnsureLoaded hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_ResourceLoadFromArchiveSlot = (void*)(0x713fb0);
+    if (MH_CreateHook(targetAddr_ResourceLoadFromArchiveSlot, &Hook_ResourceLoadFromArchiveSlot,
+        (LPVOID*)&g_originalResourceLoadFromArchiveSlot) == MH_OK) {
+            if (MH_EnableHook(targetAddr_ResourceLoadFromArchiveSlot) == MH_OK) {
+                Log("ResourceLoadFromArchiveSlot hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_ResourceLoadMemoryBacked = (void*)(0x713e80);
+    if (MH_CreateHook(targetAddr_ResourceLoadMemoryBacked, &Hook_ResourceLoadMemoryBacked,
+        (LPVOID*)&g_originalResourceLoadMemoryBacked) == MH_OK) {
+            if (MH_EnableHook(targetAddr_ResourceLoadMemoryBacked) == MH_OK) {
+                Log("ResourceLoadMemoryBacked hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_ResourceLoadFromArchive = (void*)(0x713bf0);
+    if (MH_CreateHook(targetAddr_ResourceLoadFromArchive, &Hook_ResourceLoadFromArchive,
+        (LPVOID*)&g_originalResourceLoadFromArchive) == MH_OK) {
+            if (MH_EnableHook(targetAddr_ResourceLoadFromArchive) == MH_OK) {
+                Log("ResourceLoadFromArchive hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_ResourceLoadFromLooseFile = (void*)(0x7133a0);
+    if (MH_CreateHook(targetAddr_ResourceLoadFromLooseFile, &Hook_ResourceLoadFromLooseFile,
+        (LPVOID*)&g_originalResourceLoadFromLooseFile) == MH_OK) {
+            if (MH_EnableHook(targetAddr_ResourceLoadFromLooseFile) == MH_OK) {
+                Log("ResourceLoadFromLooseFile hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_LooseFileOpen = (void*)(0x73da40);
+    if (MH_CreateHook(targetAddr_LooseFileOpen, &Hook_LooseFileOpen,
+        (LPVOID*)&g_originalLooseFileOpen) == MH_OK) {
+            if (MH_EnableHook(targetAddr_LooseFileOpen) == MH_OK) {
+                Log("LooseFileOpen hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_LooseFileRead = (void*)(0x73dd20);
+    if (MH_CreateHook(targetAddr_LooseFileRead, &Hook_LooseFileRead,
+        (LPVOID*)&g_originalLooseFileRead) == MH_OK) {
+            if (MH_EnableHook(targetAddr_LooseFileRead) == MH_OK) {
+                Log("LooseFileRead hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_ResourceFinalizeAsyncLoad = (void*)(0x715a60);
+    if (MH_CreateHook(targetAddr_ResourceFinalizeAsyncLoad, &Hook_ResourceFinalizeAsyncLoad,
+        (LPVOID*)&g_originalResourceFinalizeAsyncLoad) == MH_OK) {
+            if (MH_EnableHook(targetAddr_ResourceFinalizeAsyncLoad) == MH_OK) {
+                Log("ResourceFinalizeAsyncLoad hook installed successfully");
             } else { Log("Failed to enable hook"); }
         } else { Log("Failed to create hook"); }
 

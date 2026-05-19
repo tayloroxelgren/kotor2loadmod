@@ -122,6 +122,14 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 |`FUN_005308b0` | **GameSaveLoadManager** | Central save/load system dispatcher for the game. It uses a single-byte parameter to determine which action to perform | no |
 |`FUN_00711750` | **ResourceLoader** | Main function that loads resources | no |
 |`FUN_00711690` | **ResourceLoaderWrapper** | Wrapper for resource loader | no |
+|`FUN_00711c20` | **ResourceEnsureLoaded** | Ensures a resource entry has resident data. If the entry is not loaded, dispatches to the correct backend based on the high bits of the packed resource id, handles async completion waits/finalization, bumps the resource refcount, and returns the loaded data pointer. | yes |
+|`FUN_00713fb0` | **ResourceLoadFromArchiveSlot** | Loads a resource from an indexed archive/resource-manager slot. Allocates a destination buffer, asks the archive vtable for size/read operations, and marks the resource loaded when the read and parse callback succeed. | yes |
+|`FUN_00713e80` | **ResourceLoadMemoryBacked** | Resolves a resource whose data is already memory-backed by the resource manager. Sets the resource size/data pointer, marks it loaded, and runs the resource parse callback without a loose-file read. | yes |
+|`FUN_00713bf0` | **ResourceLoadFromArchive** | Loads a resource through the default archive/resource-manager backend. Similar to `ResourceLoadFromArchiveSlot`, but uses the archive object directly rather than a selected archive slot. | yes |
+|`FUN_007133a0` | **ResourceLoadFromLooseFile** | Loads a resource from the loose-file backend. Opens the file, measures it, allocates the resource buffer, reads file bytes, and invokes the resource parse callback. | yes |
+|`FUN_0073da40` | **LooseFileOpen** | Builds a loose-resource filename/mode pair and calls `_fopen`, storing the resulting `FILE*` in the loose-file wrapper object. | yes |
+|`FUN_0073dd20` | **LooseFileRead** | Reads bytes from an already opened loose-resource `FILE*` with `_fread`, handling `ferror` and `feof` failure cases. | yes |
+|`FUN_00715a60` | **ResourceFinalizeAsyncLoad** | Finalizes a completed async resource request: closes/releases backend handles, clears async flags, marks the resource loaded, invokes the resource parse callback, and clears async state. | yes |
 |`FUN_0040fe60` | **SetResourceStateAndTriggerUpdate** | Toggles a state flag for a resource and, if the flag is enabled, triggers a batch update and logging process. | no |
 |`FUN_007178e0` | **GFF_LookupFieldLabelByName** | Finds the slot index of a named field within the specific GFF struct/list selected by `param_1` (a pointer to a struct index). It walks that struct's field entries, then compares each entry's label index against the global 16-byte label table at `gffPtr+0x54`. Returns -1 when no matching field is found. | no |
 |`FUN_0040ee40` | **GUI_InitWidgetFromGFF** | Loads and initializes a GUI widget from its GFF layout resource. Creates a `CResGFF` object, opens the `.gui` file via the resource streamer, then parses `COLOR`/`BORDER`/`BACKGROUND`/`ALPHA`/`CONTROLS` fields and scales coordinates to screen resolution. Guards against double-init via a flag bit. | yes |
@@ -185,29 +193,44 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
                     - ModuleChunkLoadCore
                         - InitializeGameUI
 
-#### ModuleChunkLoadCore timing read, 2026-05-17 run (~303ms avg per call)
-`ModuleChunkLoadCore` totals 1212.92ms over 4 calls, averaging 303.23ms per call. 
+#### ModuleChunkLoadCore timing read
+`ModuleChunkLoadCore` totals 1553.64ms over 4 calls, averaging 388.41ms per call. 
 
-The strongest current signal is the repeated GUI binding path:
+These timings are inclusive hook totals, not exclusive flamegraph time. Nested work is counted in both parent and child hooks, so phase totals should be read as attribution clues rather than values that add exactly to `ModuleChunkLoadCore`.
 
-- `GUI_BindNamedWidget`: 333.29ms total over 2400 calls, averaging 0.14ms per call.
-- `GUI_FindAndBindControlByTag`: 293.41ms total over 2400 calls, averaging 0.12ms per call.
+The current strongest nested signals are:
 
-These two numbers are nested, not additive. `GUI_BindNamedWidget` calls `GUI_FindAndBindControlByTag` first, then performs position/size scaling, `LBL_BAR*` special handling, and control registration. The high total is mostly from call volume: roughly 600 named widget binds per `ModuleChunkLoadCore` call.
+- `GUI_BindNamedWidget`: 734.30ms total over 2432 calls, averaging 0.30ms per call.
+- `GUI_FindAndBindControlByTag`: 692.13ms total over 2432 calls, averaging 0.28ms per call.
+- `OpenOrStreamGameFile`: 2493.42ms total over 2644 calls, averaging 0.94ms per call.
+- `fopen`: 1031.72ms total over 8951 calls, averaging 0.12ms per call.
 
-Current call shape:
+`GUI_BindNamedWidget` and `GUI_FindAndBindControlByTag` are nested, not additive. `GUI_BindNamedWidget` calls `GUI_FindAndBindControlByTag` first, then performs position/size scaling, `LBL_BAR*` special handling, and control registration. The high total is mostly from call volume and GFF tag lookup work.
 
-- `ModuleChunkLoadCore`
-    - constructs many GUI screens and panels
-    - calls `InitializeGameUI`
-    - each screen constructor / `InitializeGameUI` loads a GUI layout and binds named controls
-        - `GUI_BindNamedWidget`
-            - `GUI_FindAndBindControlByTag`
-                - linear scans the GFF `CONTROLS` list and compares each child `TAG`
 
-Highest named constructor in the current run is `CSWGuiInGameCharacter_Ctor` at 110.98ms total / 27.75ms avg. The broader `LoadingScreenUpdateFrame`, `ProcessResourceQueue`, and packet-handler timings include nested work and calls outside `ModuleChunkLoadCore`, so they should not be treated as exclusive child costs of this function without interval-aware tracing.
+#### ModuleChunkLoadCore phase breakdown
+Ghidra shows five `LoadingScreenUpdateFrame(_DAT_00986da8, 0, 0)` calls inside `ModuleChunkLoadCore`. Those calls divide the function into the following constructor phases:
 
-Working hypothesis: `ModuleChunkLoadCore` is not slow because one constructor is catastrophically expensive. It is slow because it eagerly pre-warms a large amount of UI and repeatedly resolves named controls by scanning GFF layout data.
+| Phase | Ghidra boundary | Main work | Current direct timing signal |
+|---|---|---|---|
+| Phase 0 | Start to first `LoadingScreenUpdateFrame` | `DebugMenuConstructor`, `CSWGuiLoadModuleDebugMenu_Ctor`, `CSWGuiPowersFeatsSkillsDebugMenu_Ctor` | ~0ms |
+| Phase 1 | First to second `LoadingScreenUpdateFrame` | Debug/item/dialog/message box setup: `CSWGuiCreateDebugItemSubMenu_Ctor`, `CSWGuiExamine_Ctor`, `CSWGuiBarkBubble_Ctor`, `CSWGuiContainer_Ctor`, `CSWGuiDialogCinematic_Ctor`, `CSWGuiDialogComputerCamera_Ctor`, `CSWGuiMessageBox_Ctor`, `CSWGuiMessageBoxVariant_Ctor`, `CSWGuiSkillInfoBox_Ctor` | ~355ms, dominated by `CSWGuiMessageBox_Ctor` at 337.36ms |
+| Phase 2 | Second to third `LoadingScreenUpdateFrame` | Mid-size in-game UI: `CSWGuiFade_Ctor`, `CSWGuiInGameMenu_Ctor`, `CSWGuiInGamePause_Ctor`, `CSWGuiInGameSoloModeQuery_Ctor`, `CSWGuiInGameAreaTransition_Ctor`, optional `CSWGuiInGameMessages_Ctor`, `CSWGuiStore_Ctor`, `CSWGuiInGameEquip_Ctor`, `CSWGuiInGameInventory_Ctor` | ~197-200ms |
+| Phase 3 | Third to fourth `LoadingScreenUpdateFrame` | Character/status/main interface: `CSWGuiInGameCharacter_Ctor`, `CSWGuiStatusSummary_Ctor`, `InitializeGameUI` | ~213ms |
+| Phase 4 | Fourth to fifth `LoadingScreenUpdateFrame` | Late in-game panels: `CSWGuiInGameMap_Ctor`, `CSWGuiInGameAbilities_Ctor`, `CSWGuiInGameJournal_Ctor`, `CSWGuiInGameOptions_Ctor`, `CSWGuiPartySelection_Ctor`, `CSWGuiInGameGalaxyMap_Ctor` | ~292ms |
+
+Current direct constructor ranking inside the phases:
+
+- `CSWGuiMessageBox_Ctor`: 337.36ms total, 30.67ms average over 11 calls.
+- `CSWGuiInGameGalaxyMap_Ctor`: 131.93ms total, 32.98ms average over 4 calls.
+- `CSWGuiInGameCharacter_Ctor`: 117.98ms total, 29.50ms average over 4 calls.
+- `InitializeGameUI`: 81.81ms total, 20.45ms average over 4 calls.
+- `CSWGuiInGameJournal_Ctor`: 52.04ms total, 13.01ms average over 4 calls.
+- `CSWGuiInGameSoloModeQuery_Ctor`: 45.95ms total, 11.49ms average over 4 calls.
+- `CSWGuiPartySelection_Ctor`: 42.34ms total, 10.58ms average over 4 calls.
+- `CSWGuiInGameAbilities_Ctor`: 40.20ms total, 10.05ms average over 4 calls.
+
+Current hypothesis: the best optimization target is probably not one GUI constructor's own logic. The latest run is heavily resource/file I/O shaped (`OpenOrStreamGameFile`, `fopen`, `GUI_InitWidgetFromGFF`), while `GUI_BindNamedWidget` / `GUI_FindAndBindControlByTag` remain the biggest repeated nested GUI path. 
 
 ## Build Instructions
 Download [MinHook](https://github.com/TsudaKageyu/minhook)

@@ -127,6 +127,30 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 |`FUN_00713e80` | **ResourceLoadMemoryBacked** | Resolves a resource whose data is already memory-backed by the resource manager. Sets the resource size/data pointer, marks it loaded, and runs the resource parse callback without a loose-file read. | yes |
 |`FUN_00713bf0` | **ResourceLoadFromArchive** | Loads a resource through the default archive/resource-manager backend. Similar to `ResourceLoadFromArchiveSlot`, but uses the archive object directly rather than a selected archive slot. | yes |
 |`FUN_007133a0` | **ResourceLoadFromLooseFile** | Loads a resource from the loose-file backend. Opens the file, measures it, allocates the resource buffer, reads file bytes, and invokes the resource parse callback. | yes |
+|`FUN_00712f30` | **Resource_AllocateLoadBuffer** | Allocates the destination buffer for an archive or loose resource load. If the resource-memory budget is tight, this path can purge unused loaded resources before allocating. | yes |
+|`FUN_007270a0` | **CExoResFile_AddRefSyncOpen** | BIF/KEY reader sync open/reference wrapper used by archive loads before size/read work. Calls the concrete open handle routine on the first active reference. | yes |
+|`FUN_007270f0` | **CExoResFile_AddRefAsyncOpen** | BIF/KEY reader async open/reference wrapper used by async archive loads. | yes |
+|`FUN_00727450` | **CExoResFile_OpenSyncHandle** | Opens the BIF/KEY packed-file handle for sync reads. Timed separately from the wrapper to expose actual file-open cost. | yes |
+|`FUN_007275b0` | **CExoResFile_OpenAsyncHandle** | Opens the BIF/KEY packed-file handle for async reads. | yes |
+|`FUN_00727390` | **CExoResFile_GetResourceSize** | Returns the resource byte size from the BIF/KEY reader table. | yes |
+|`FUN_00727930` | **CExoResFile_ReadResourceSync** | Seeks to a BIF/KEY resource offset and reads its bytes into the destination buffer. | yes |
+|`FUN_007279f0` | **CExoResFile_ReadResourceAsync** | Queues or performs the async BIF/KEY resource read path. | yes |
+|`FUN_007272f0` | **CExoResFile_ReleaseSyncClose** | Releases the sync BIF/KEY reader reference and closes the handle when the reference count reaches zero. | yes |
+|`FUN_00727340` | **CExoResFile_ReleaseAsyncClose** | Releases the async BIF/KEY reader reference and closes the handle when the reference count reaches zero. | yes |
+|`FUN_007295b0` | **ArchiveReaderShared_AddRefSyncOpen** | Shared sync open/reference wrapper used by encapsulated/RIM-style archive readers. Calls the concrete image/open routine on the first active reference. | yes |
+|`FUN_00727bb0` | **CExoEncapsulatedFile_AddRefAsyncOpen** | ERF/MOD/HAK reader async open/reference wrapper. | yes |
+|`FUN_00727e30` | **CExoEncapsulatedFile_OpenSyncHandle** | Opens and parses the ERF/MOD/HAK archive header and resource table for sync reads. | yes |
+|`FUN_00728230` | **CExoEncapsulatedFile_OpenAsyncHandle** | Opens and parses the ERF/MOD/HAK archive header and resource table for async reads. | yes |
+|`FUN_00727d90` | **CExoEncapsulatedFile_GetResourceSize** | Returns the resource byte size from the encapsulated archive table. | yes |
+|`FUN_00729370` | **CExoEncapsulatedFile_ReadResourceSync** | Seeks to an ERF/MOD/HAK resource offset and reads bytes into the destination buffer. | yes |
+|`FUN_00729420` | **CExoEncapsulatedFile_ReadResourceAsync** | Queues or performs the async encapsulated archive resource read path. | yes |
+|`FUN_00727d10` | **CExoEncapsulatedFile_ReleaseSyncClose** | Releases the sync encapsulated-file reader reference and closes the handle when needed. | yes |
+|`FUN_00727d50` | **CExoEncapsulatedFile_ReleaseAsyncClose** | Releases the async encapsulated-file reader reference and closes the handle when needed. | yes |
+|`FUN_00729790` | **CExoResourceImageFile_LoadImage** | Loads a RIM/resource-image file into memory; after this, individual resource reads are memory copies rather than file reads. | yes |
+|`FUN_007296e0` | **CExoResourceImageFile_GetResourceSize** | Returns the resource byte size from the loaded RIM/image table. | yes |
+|`FUN_00729ae0` | **CExoResourceImageFile_ReadResourceSync** | Copies a resource from the already loaded RIM/image memory block into the destination buffer. | yes |
+|`FUN_00729b80` | **CExoResourceImageFile_ReadResourceAsync** | Async wrapper for RIM/image resource reads. | yes |
+|`FUN_00729650` | **CExoResourceImageFile_ReleaseSyncClose** | Releases the sync RIM/image reader reference. | yes |
 |`FUN_0073da40` | **LooseFileOpen** | Builds a loose-resource filename/mode pair and calls `_fopen`, storing the resulting `FILE*` in the loose-file wrapper object. | yes |
 |`FUN_0073dd20` | **LooseFileRead** | Reads bytes from an already opened loose-resource `FILE*` with `_fread`, handling `ferror` and `feof` failure cases. | yes |
 |`FUN_00715a60` | **ResourceFinalizeAsyncLoad** | Finalizes a completed async resource request: closes/releases backend handles, clears async flags, marks the resource loaded, invokes the resource parse callback, and clears async state. | yes |
@@ -231,6 +255,17 @@ Current direct constructor ranking inside the phases:
 - `CSWGuiInGameAbilities_Ctor`: 40.20ms total, 10.05ms average over 4 calls.
 
 Current hypothesis: the best optimization target is probably not one GUI constructor's own logic. The latest run is heavily resource/file I/O shaped (`OpenOrStreamGameFile`, `fopen`, `GUI_InitWidgetFromGFF`), while `GUI_BindNamedWidget` / `GUI_FindAndBindControlByTag` remain the biggest repeated nested GUI path. 
+
+#### Archive resource load breakdown
+
+`ResourceLoadFromArchive` and `ResourceLoadFromArchiveSlot` now have simple direct hooks for the concrete archive-reader vtable calls seen in Ghidra:
+
+- open/reference wrappers: `CExoResFile_AddRefSyncOpen`, `ArchiveReaderShared_AddRefSyncOpen`, async variants
+- concrete open/image load routines: `CExoResFile_OpenSyncHandle`, `CExoEncapsulatedFile_OpenSyncHandle`, `CExoResourceImageFile_LoadImage`
+- size lookup: `*_GetResourceSize`
+- destination allocation: `Resource_AllocateLoadBuffer`
+- data transfer: `*_ReadResourceSync` / `*_ReadResourceAsync`
+- close/release wrappers: `*_ReleaseSyncClose` / `*_ReleaseAsyncClose`
 
 ## Build Instructions
 Download [MinHook](https://github.com/TsudaKageyu/minhook)

@@ -2,6 +2,9 @@ import sys
 import re
 import statistics
 
+def metric_pattern(name):
+    return re.compile(rf'{re.escape(name)}:\s*(\d+)')
+
 def parse_loadingscreen_times(file_path,pattern):
     """
     Reads the file at `file_path`, finds all lines containing 'loadingscreen',
@@ -9,7 +12,7 @@ def parse_loadingscreen_times(file_path,pattern):
     """
     times = []
 
-    with open(file_path, 'r', encoding='utf-8') as f:
+    with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
         for line in f:
             m = pattern.search(line)
             if m:
@@ -17,7 +20,7 @@ def parse_loadingscreen_times(file_path,pattern):
 
     count = len(times)
     if count == 0:
-        return 0, 0.0, 0
+        return 0, 0.0, 0, 0.0
     
     std_dev= statistics.stdev(times) if len(times)>1 else 0.0
 
@@ -33,92 +36,118 @@ def main():
     logfile = sys.argv[1]
 
     patterns = [
-        ("loadingscreen", re.compile(r'loadingscreen:\s*(\d+)\s*μs')),
-        ("LoadAndInitialize", re.compile(r'LoadAndInitialize:\s*(\d+)\s*μs')),
-        ("ProcessResourceQueue", re.compile(r'ProcessResourceQueue:\s*(\d+)\s*μs')),
-        ("InitShadowCache", re.compile(r'InitShadowCache:\s*(\d+)\s*μs')),
-        ("LoadResourceBlockOrFallback", re.compile(r'LoadResourceBlockOrFallback:\s*(\d+)\s*μs')),
-        ("HandleBNPacket", re.compile(r'HandleBNPacket:\s*(\d+)\s*μs')),
-        ("FlushTracer", re.compile(r'FlushTracer:\s*(\d+)\s*μs')),
-        ("Elsefunction", re.compile(r'Elsefunction:\s*(\d+)\s*μs')),
-        ("ResourcePacketDispatcher", re.compile(r'ResourcePacketDispatcher:\s*(\d+)\s*μs')),
-        ("ResourceQueue_UnpackAndTrace", re.compile(r'ResourceQueue_UnpackAndTrace:\s*(\d+)\s*μs')),
-        ("PpacketHandler", re.compile(r'PpacketHandler:\s*(\d+)\s*μs')),
-        ("SpacketHandler", re.compile(r'SpacketHandler:\s*(\d+)\s*μs')),
-        ("ModuleHandler", re.compile(r'ModuleHandler:\s*(\d+)\s*μs')),
-        ("ModuleChunkLoadCore", re.compile(r'ModuleChunkLoadCore:\s*(\d+)\s*μs')),
-        ("LoadingScreenUpdateFrame", re.compile(r'LoadingScreenUpdateFrame:\s*(\d+)\s*μs')),
-        ("GameObjUpdate", re.compile(r'GameObjUpdate:\s*(\d+)\s*μs')),
-        ("LevelLoaderAndInitializer", re.compile(r'LevelLoaderAndInitializer:\s*(\d+)\s*μs')),
-        ("DebugMenuConstructor", re.compile(r'DebugMenuConstructor:\s*(\d+)\s*μs')),
-        ("fopen", re.compile(r'fopen:\s*(\d+)\s*μs')),
-        ("gobconstructor", re.compile(r'gobconstructor:\s*(\d+)\s*μs')),
-        ("areaconstructor", re.compile(r'areaconstructor:\s*(\d+)\s*μs')),
-        ("InitializeGameUI", re.compile(r'InitializeGameUI:\s*(\d+)\s*μs')),
-        ("GUI_Update3DSceneView", re.compile(r'GUI_Update3DSceneView:\s*(\d+)\s*μs')),
-        ("AllocateMemoryOrThrow", re.compile(r'AllocateMemoryOrThrow:\s*(\d+)\s*μs')),
-        ("ModuleDirectoryScanner", re.compile(r'ModuleDirectoryScanner:\s*(\d+)\s*μs')),
-        ("ArrayAdd", re.compile(r'ArrayAdd:\s*(\d+)\s*μs')),
-        ("CSWGuiLoadModuleDebugMenu_Ctor", re.compile(r'CSWGuiLoadModuleDebugMenu_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiPowersFeatsSkillsDebugMenu_Ctor", re.compile(r'CSWGuiPowersFeatsSkillsDebugMenu_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiDialogCinematic_Ctor", re.compile(r'CSWGuiDialogCinematic_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiDialogComputerCamera_Ctor", re.compile(r'CSWGuiDialogComputerCamera_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiComputerDialog_Ctor", re.compile(r'CSWGuiComputerDialog_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiSkillInfoBox_Ctor", re.compile(r'CSWGuiSkillInfoBox_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiContainer_Ctor", re.compile(r'CSWGuiContainer_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiExamine_Ctor", re.compile(r'CSWGuiExamine_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiCreateDebugItemSubMenu_Ctor", re.compile(r'CSWGuiCreateDebugItemSubMenu_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiTutorialBox_Ctor", re.compile(r'CSWGuiTutorialBox_Ctor:\s*(\d+)\s*μs')),
-        ("OpenOrStreamGameFile", re.compile(r'OpenOrStreamGameFile:\s*(\d+)\s*μs')),
-        ("CSWGuiBarkBubble_Ctor", re.compile(r'CSWGuiBarkBubble_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiMessageBox_Ctor", re.compile(r'CSWGuiMessageBox_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiMessageBoxVariant_Ctor", re.compile(r'CSWGuiMessageBoxVariant_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiDialogLetterbox_Ctor", re.compile(r'CSWGuiDialogLetterbox_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiFade_Ctor", re.compile(r'CSWGuiFade_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiInGameMenu_Ctor", re.compile(r'CSWGuiInGameMenu_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiInGamePause_Ctor", re.compile(r'CSWGuiInGamePause_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiInGameSoloModeQuery_Ctor", re.compile(r'CSWGuiInGameSoloModeQuery_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiInGameAreaTransition_Ctor", re.compile(r'CSWGuiInGameAreaTransition_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiInGameMessages_Ctor", re.compile(r'CSWGuiInGameMessages_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiStore_Ctor", re.compile(r'CSWGuiStore_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiInGameEquip_Ctor", re.compile(r'CSWGuiInGameEquip_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiInGameInventory_Ctor", re.compile(r'CSWGuiInGameInventory_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiInGameCharacter_Ctor", re.compile(r'CSWGuiInGameCharacter_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiStatusSummary_Ctor", re.compile(r'CSWGuiStatusSummary_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiInGameMap_Ctor", re.compile(r'CSWGuiInGameMap_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiInGameAbilities_Ctor", re.compile(r'CSWGuiInGameAbilities_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiInGameJournal_Ctor", re.compile(r'CSWGuiInGameJournal_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiInGameOptions_Ctor", re.compile(r'CSWGuiInGameOptions_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiPartySelection_Ctor", re.compile(r'CSWGuiPartySelection_Ctor:\s*(\d+)\s*μs')),
-        ("CSWGuiInGameGalaxyMap_Ctor", re.compile(r'CSWGuiInGameGalaxyMap_Ctor:\s*(\d+)\s*μs')),
-        ("GUI_InitWidgetFromGFF", re.compile(r'GUI_InitWidgetFromGFF:\s*(\d+)\s*μs')),
-        ("GUI_FindAndBindControlByTag", re.compile(r'GUI_FindAndBindControlByTag:\s*(\d+)\s*μs')),
-        ("GUI_BindNamedWidget", re.compile(r'GUI_BindNamedWidget:\s*(\d+)\s*μs')),
-        ("ResourceEnsureLoaded", re.compile(r'ResourceEnsureLoaded:\s*(\d+)\s*μs')),
-        ("ResourceLoadFromArchiveSlot", re.compile(r'ResourceLoadFromArchiveSlot:\s*(\d+)\s*μs')),
-        ("ResourceLoadMemoryBacked", re.compile(r'ResourceLoadMemoryBacked:\s*(\d+)\s*μs')),
-        ("ResourceLoadFromArchive", re.compile(r'ResourceLoadFromArchive:\s*(\d+)\s*μs')),
-        ("ResourceLoadFromLooseFile", re.compile(r'ResourceLoadFromLooseFile:\s*(\d+)\s*μs')),
-        ("LooseFileOpen", re.compile(r'LooseFileOpen:\s*(\d+)\s*μs')),
-        ("LooseFileRead", re.compile(r'LooseFileRead:\s*(\d+)\s*μs')),
-        ("ResourceFinalizeAsyncLoad", re.compile(r'ResourceFinalizeAsyncLoad:\s*(\d+)\s*μs')),
+        ("loadingscreen", metric_pattern("loadingscreen")),
+        ("LoadAndInitialize", metric_pattern("LoadAndInitialize")),
+        ("ProcessResourceQueue", metric_pattern("ProcessResourceQueue")),
+        ("InitShadowCache", metric_pattern("InitShadowCache")),
+        ("LoadResourceBlockOrFallback", metric_pattern("LoadResourceBlockOrFallback")),
+        ("HandleBNPacket", metric_pattern("HandleBNPacket")),
+        ("FlushTracer", metric_pattern("FlushTracer")),
+        ("Elsefunction", metric_pattern("Elsefunction")),
+        ("ResourcePacketDispatcher", metric_pattern("ResourcePacketDispatcher")),
+        ("ResourceQueue_UnpackAndTrace", metric_pattern("ResourceQueue_UnpackAndTrace")),
+        ("PpacketHandler", metric_pattern("PpacketHandler")),
+        ("SpacketHandler", metric_pattern("SpacketHandler")),
+        ("ModuleHandler", metric_pattern("ModuleHandler")),
+        ("ModuleChunkLoadCore", metric_pattern("ModuleChunkLoadCore")),
+        ("LoadingScreenUpdateFrame", metric_pattern("LoadingScreenUpdateFrame")),
+        ("GameObjUpdate", metric_pattern("GameObjUpdate")),
+        ("LevelLoaderAndInitializer", metric_pattern("LevelLoaderAndInitializer")),
+        ("DebugMenuConstructor", metric_pattern("DebugMenuConstructor")),
+        ("fopen", metric_pattern("fopen")),
+        ("gobconstructor", metric_pattern("gobconstructor")),
+        ("areaconstructor", metric_pattern("areaconstructor")),
+        ("InitializeGameUI", metric_pattern("InitializeGameUI")),
+        ("GUI_Update3DSceneView", metric_pattern("GUI_Update3DSceneView")),
+        ("AllocateMemoryOrThrow", metric_pattern("AllocateMemoryOrThrow")),
+        ("ModuleDirectoryScanner", metric_pattern("ModuleDirectoryScanner")),
+        ("ArrayAdd", metric_pattern("ArrayAdd")),
+        ("CSWGuiLoadModuleDebugMenu_Ctor", metric_pattern("CSWGuiLoadModuleDebugMenu_Ctor")),
+        ("CSWGuiPowersFeatsSkillsDebugMenu_Ctor", metric_pattern("CSWGuiPowersFeatsSkillsDebugMenu_Ctor")),
+        ("CSWGuiDialogCinematic_Ctor", metric_pattern("CSWGuiDialogCinematic_Ctor")),
+        ("CSWGuiDialogComputerCamera_Ctor", metric_pattern("CSWGuiDialogComputerCamera_Ctor")),
+        ("CSWGuiComputerDialog_Ctor", metric_pattern("CSWGuiComputerDialog_Ctor")),
+        ("CSWGuiSkillInfoBox_Ctor", metric_pattern("CSWGuiSkillInfoBox_Ctor")),
+        ("CSWGuiContainer_Ctor", metric_pattern("CSWGuiContainer_Ctor")),
+        ("CSWGuiExamine_Ctor", metric_pattern("CSWGuiExamine_Ctor")),
+        ("CSWGuiCreateDebugItemSubMenu_Ctor", metric_pattern("CSWGuiCreateDebugItemSubMenu_Ctor")),
+        ("CSWGuiTutorialBox_Ctor", metric_pattern("CSWGuiTutorialBox_Ctor")),
+        ("OpenOrStreamGameFile", metric_pattern("OpenOrStreamGameFile")),
+        ("CSWGuiBarkBubble_Ctor", metric_pattern("CSWGuiBarkBubble_Ctor")),
+        ("CSWGuiMessageBox_Ctor", metric_pattern("CSWGuiMessageBox_Ctor")),
+        ("CSWGuiMessageBoxVariant_Ctor", metric_pattern("CSWGuiMessageBoxVariant_Ctor")),
+        ("CSWGuiDialogLetterbox_Ctor", metric_pattern("CSWGuiDialogLetterbox_Ctor")),
+        ("CSWGuiFade_Ctor", metric_pattern("CSWGuiFade_Ctor")),
+        ("CSWGuiInGameMenu_Ctor", metric_pattern("CSWGuiInGameMenu_Ctor")),
+        ("CSWGuiInGamePause_Ctor", metric_pattern("CSWGuiInGamePause_Ctor")),
+        ("CSWGuiInGameSoloModeQuery_Ctor", metric_pattern("CSWGuiInGameSoloModeQuery_Ctor")),
+        ("CSWGuiInGameAreaTransition_Ctor", metric_pattern("CSWGuiInGameAreaTransition_Ctor")),
+        ("CSWGuiInGameMessages_Ctor", metric_pattern("CSWGuiInGameMessages_Ctor")),
+        ("CSWGuiStore_Ctor", metric_pattern("CSWGuiStore_Ctor")),
+        ("CSWGuiInGameEquip_Ctor", metric_pattern("CSWGuiInGameEquip_Ctor")),
+        ("CSWGuiInGameInventory_Ctor", metric_pattern("CSWGuiInGameInventory_Ctor")),
+        ("CSWGuiInGameCharacter_Ctor", metric_pattern("CSWGuiInGameCharacter_Ctor")),
+        ("CSWGuiStatusSummary_Ctor", metric_pattern("CSWGuiStatusSummary_Ctor")),
+        ("CSWGuiInGameMap_Ctor", metric_pattern("CSWGuiInGameMap_Ctor")),
+        ("CSWGuiInGameAbilities_Ctor", metric_pattern("CSWGuiInGameAbilities_Ctor")),
+        ("CSWGuiInGameJournal_Ctor", metric_pattern("CSWGuiInGameJournal_Ctor")),
+        ("CSWGuiInGameOptions_Ctor", metric_pattern("CSWGuiInGameOptions_Ctor")),
+        ("CSWGuiPartySelection_Ctor", metric_pattern("CSWGuiPartySelection_Ctor")),
+        ("CSWGuiInGameGalaxyMap_Ctor", metric_pattern("CSWGuiInGameGalaxyMap_Ctor")),
+        ("GUI_InitWidgetFromGFF", metric_pattern("GUI_InitWidgetFromGFF")),
+        ("GUI_FindAndBindControlByTag", metric_pattern("GUI_FindAndBindControlByTag")),
+        ("GUI_BindNamedWidget", metric_pattern("GUI_BindNamedWidget")),
+        ("ResourceEnsureLoaded", metric_pattern("ResourceEnsureLoaded")),
+        ("ResourceLoadFromArchiveSlot", metric_pattern("ResourceLoadFromArchiveSlot")),
+        ("ResourceLoadMemoryBacked", metric_pattern("ResourceLoadMemoryBacked")),
+        ("ResourceLoadFromArchive", metric_pattern("ResourceLoadFromArchive")),
+        ("ResourceLoadFromLooseFile", metric_pattern("ResourceLoadFromLooseFile")),
+        ("LooseFileOpen", metric_pattern("LooseFileOpen")),
+        ("LooseFileRead", metric_pattern("LooseFileRead")),
+        ("ResourceFinalizeAsyncLoad", metric_pattern("ResourceFinalizeAsyncLoad")),
+        ("Resource_AllocateLoadBuffer", metric_pattern("Resource_AllocateLoadBuffer")),
+        ("CExoResFile_AddRefSyncOpen", metric_pattern("CExoResFile_AddRefSyncOpen")),
+        ("CExoResFile_AddRefAsyncOpen", metric_pattern("CExoResFile_AddRefAsyncOpen")),
+        ("CExoResFile_OpenSyncHandle", metric_pattern("CExoResFile_OpenSyncHandle")),
+        ("CExoResFile_OpenAsyncHandle", metric_pattern("CExoResFile_OpenAsyncHandle")),
+        ("CExoResFile_GetResourceSize", metric_pattern("CExoResFile_GetResourceSize")),
+        ("CExoResFile_ReadResourceSync", metric_pattern("CExoResFile_ReadResourceSync")),
+        ("CExoResFile_ReadResourceAsync", metric_pattern("CExoResFile_ReadResourceAsync")),
+        ("CExoResFile_ReleaseSyncClose", metric_pattern("CExoResFile_ReleaseSyncClose")),
+        ("CExoResFile_ReleaseAsyncClose", metric_pattern("CExoResFile_ReleaseAsyncClose")),
+        ("ArchiveReaderShared_AddRefSyncOpen", metric_pattern("ArchiveReaderShared_AddRefSyncOpen")),
+        ("CExoEncapsulatedFile_AddRefAsyncOpen", metric_pattern("CExoEncapsulatedFile_AddRefAsyncOpen")),
+        ("CExoEncapsulatedFile_OpenSyncHandle", metric_pattern("CExoEncapsulatedFile_OpenSyncHandle")),
+        ("CExoEncapsulatedFile_OpenAsyncHandle", metric_pattern("CExoEncapsulatedFile_OpenAsyncHandle")),
+        ("CExoEncapsulatedFile_GetResourceSize", metric_pattern("CExoEncapsulatedFile_GetResourceSize")),
+        ("CExoEncapsulatedFile_ReadResourceSync", metric_pattern("CExoEncapsulatedFile_ReadResourceSync")),
+        ("CExoEncapsulatedFile_ReadResourceAsync", metric_pattern("CExoEncapsulatedFile_ReadResourceAsync")),
+        ("CExoEncapsulatedFile_ReleaseSyncClose", metric_pattern("CExoEncapsulatedFile_ReleaseSyncClose")),
+        ("CExoEncapsulatedFile_ReleaseAsyncClose", metric_pattern("CExoEncapsulatedFile_ReleaseAsyncClose")),
+        ("CExoResourceImageFile_LoadImage", metric_pattern("CExoResourceImageFile_LoadImage")),
+        ("CExoResourceImageFile_GetResourceSize", metric_pattern("CExoResourceImageFile_GetResourceSize")),
+        ("CExoResourceImageFile_ReadResourceSync", metric_pattern("CExoResourceImageFile_ReadResourceSync")),
+        ("CExoResourceImageFile_ReadResourceAsync", metric_pattern("CExoResourceImageFile_ReadResourceAsync")),
+        ("CExoResourceImageFile_ReleaseSyncClose", metric_pattern("CExoResourceImageFile_ReleaseSyncClose")),
     ]
 
     for name, p in patterns:
         try:
             total_us, avg_us, count, std_us = parse_loadingscreen_times(logfile, p)
+            if count == 0:
+                print(f"Function data not found for: {name}")
+                continue
 
             total_ms = total_us / 1000
             avg_ms = avg_us / 1000
             std_ms = std_us / 1000
 
-            print(f"=== {name} ===") 
-            print(f"Total time:   {total_us} μs ({total_ms:.2f} ms)")
-            print(f"Average time: {avg_us:.2f} μs ({avg_ms:.2f} ms) over {count} samples")
-            print(f"Std deviation: {std_us:.2f} μs ({std_ms:.2f} ms)")
+            print(f"=== {name} ===")
+            print(f"Total time:   {total_us} us ({total_ms:.2f} ms)")
+            print(f"Average time: {avg_us:.2f} us ({avg_ms:.2f} ms) over {count} samples")
+            print(f"Std deviation: {std_us:.2f} us ({std_ms:.2f} ms)")
             print()
-        except:
-            print(f"Function data not found for: {name}")
-
+        except Exception as exc:
+            print(f"Failed to parse {name}: {exc}")
 if __name__ == "__main__":
     main()

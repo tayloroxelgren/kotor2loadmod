@@ -41,7 +41,6 @@ void Log(const std::string& msg) {
     }
 }
 
-
 typedef int (__fastcall* LoadAndInitializePtr_t)(void* thisPtr, int param1, uint32_t param2, int param3);
 LoadAndInitializePtr_t g_originalLoadAndInitializePtr = nullptr;
 
@@ -1067,6 +1066,332 @@ uint32_t __fastcall Hook_ResourceFinalizeAsyncLoad(int thisPtr, void* edxDummy) 
     return result;
 }
 
+typedef int (__thiscall* Resource_AllocateLoadBufferPtr_t)(int thisPtr, int* resourceEntry);
+Resource_AllocateLoadBufferPtr_t g_originalResource_AllocateLoadBuffer = nullptr;
+
+int __fastcall Hook_Resource_AllocateLoadBuffer(int thisPtr, void* edxDummy, int* resourceEntry) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    int result = g_originalResource_AllocateLoadBuffer(thisPtr, resourceEntry);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("Resource_AllocateLoadBuffer: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef void (__thiscall* CExoResFile_AddRefSyncOpenPtr_t)(int* thisPtr);
+CExoResFile_AddRefSyncOpenPtr_t g_originalCExoResFile_AddRefSyncOpen = nullptr;
+
+void __fastcall Hook_CExoResFile_AddRefSyncOpen(int* thisPtr, void* edxDummy) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalCExoResFile_AddRefSyncOpen(thisPtr);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CExoResFile_AddRefSyncOpen: " + std::to_string(duration.count()) + " μs");
+}
+
+typedef void (__thiscall* CExoResFile_AddRefAsyncOpenPtr_t)(int* thisPtr);
+CExoResFile_AddRefAsyncOpenPtr_t g_originalCExoResFile_AddRefAsyncOpen = nullptr;
+
+void __fastcall Hook_CExoResFile_AddRefAsyncOpen(int* thisPtr, void* edxDummy) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalCExoResFile_AddRefAsyncOpen(thisPtr);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CExoResFile_AddRefAsyncOpen: " + std::to_string(duration.count()) + " μs");
+}
+
+typedef void (__thiscall* CExoResFile_ReleaseSyncClosePtr_t)(int* thisPtr);
+CExoResFile_ReleaseSyncClosePtr_t g_originalCExoResFile_ReleaseSyncClose = nullptr;
+
+void __fastcall Hook_CExoResFile_ReleaseSyncClose(int* thisPtr, void* edxDummy) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalCExoResFile_ReleaseSyncClose(thisPtr);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CExoResFile_ReleaseSyncClose: " + std::to_string(duration.count()) + " μs");
+}
+
+typedef void (__thiscall* CExoResFile_ReleaseAsyncClosePtr_t)(int* thisPtr);
+CExoResFile_ReleaseAsyncClosePtr_t g_originalCExoResFile_ReleaseAsyncClose = nullptr;
+
+void __fastcall Hook_CExoResFile_ReleaseAsyncClose(int* thisPtr, void* edxDummy) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalCExoResFile_ReleaseAsyncClose(thisPtr);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CExoResFile_ReleaseAsyncClose: " + std::to_string(duration.count()) + " μs");
+}
+
+typedef uint32_t (__thiscall* CExoResFile_GetResourceSizePtr_t)(int thisPtr, uint32_t resourceId);
+CExoResFile_GetResourceSizePtr_t g_originalCExoResFile_GetResourceSize = nullptr;
+
+uint32_t __fastcall Hook_CExoResFile_GetResourceSize(int thisPtr, void* edxDummy, uint32_t resourceId) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t result = g_originalCExoResFile_GetResourceSize(thisPtr, resourceId);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CExoResFile_GetResourceSize: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t (__thiscall* CExoResFile_ReadResourceSyncPtr_t)(int thisPtr, uint32_t resourceId, int buffer, uint32_t size);
+CExoResFile_ReadResourceSyncPtr_t g_originalCExoResFile_ReadResourceSync = nullptr;
+
+uint32_t __fastcall Hook_CExoResFile_ReadResourceSync(int thisPtr, void* edxDummy, uint32_t resourceId, int buffer, uint32_t size) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t result = g_originalCExoResFile_ReadResourceSync(thisPtr, resourceId, buffer, size);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CExoResFile_ReadResourceSync: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t (__thiscall* CExoResFile_ReadResourceAsyncPtr_t)(int thisPtr, uint32_t resourceId, int buffer, uint32_t size);
+CExoResFile_ReadResourceAsyncPtr_t g_originalCExoResFile_ReadResourceAsync = nullptr;
+
+uint32_t __fastcall Hook_CExoResFile_ReadResourceAsync(int thisPtr, void* edxDummy, uint32_t resourceId, int buffer, uint32_t size) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t result = g_originalCExoResFile_ReadResourceAsync(thisPtr, resourceId, buffer, size);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CExoResFile_ReadResourceAsync: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t (__thiscall* CExoResFile_OpenSyncHandlePtr_t)(int thisPtr, uint32_t resourceType);
+CExoResFile_OpenSyncHandlePtr_t g_originalCExoResFile_OpenSyncHandle = nullptr;
+
+uint32_t __fastcall Hook_CExoResFile_OpenSyncHandle(int thisPtr, void* edxDummy, uint32_t resourceType) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t result = g_originalCExoResFile_OpenSyncHandle(thisPtr, resourceType);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CExoResFile_OpenSyncHandle: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t (__thiscall* CExoResFile_OpenAsyncHandlePtr_t)(int thisPtr, uint32_t resourceType);
+CExoResFile_OpenAsyncHandlePtr_t g_originalCExoResFile_OpenAsyncHandle = nullptr;
+
+uint32_t __fastcall Hook_CExoResFile_OpenAsyncHandle(int thisPtr, void* edxDummy, uint32_t resourceType) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t result = g_originalCExoResFile_OpenAsyncHandle(thisPtr, resourceType);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CExoResFile_OpenAsyncHandle: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef void (__thiscall* ArchiveReaderShared_AddRefSyncOpenPtr_t)(int* thisPtr);
+ArchiveReaderShared_AddRefSyncOpenPtr_t g_originalArchiveReaderShared_AddRefSyncOpen = nullptr;
+
+void __fastcall Hook_ArchiveReaderShared_AddRefSyncOpen(int* thisPtr, void* edxDummy) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalArchiveReaderShared_AddRefSyncOpen(thisPtr);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("ArchiveReaderShared_AddRefSyncOpen: " + std::to_string(duration.count())+ " μs");
+}
+
+typedef void (__thiscall* CExoEncapsulatedFile_AddRefAsyncOpenPtr_t)(int* thisPtr);
+CExoEncapsulatedFile_AddRefAsyncOpenPtr_t g_originalCExoEncapsulatedFile_AddRefAsyncOpen = nullptr;
+
+void __fastcall Hook_CExoEncapsulatedFile_AddRefAsyncOpen(int* thisPtr, void* edxDummy) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalCExoEncapsulatedFile_AddRefAsyncOpen(thisPtr);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CExoEncapsulatedFile_AddRefAsyncOpen: " + std::to_string(duration.count())+ " μs");
+}
+
+typedef void (__thiscall* CExoEncapsulatedFile_ReleaseSyncClosePtr_t)(int* thisPtr);
+CExoEncapsulatedFile_ReleaseSyncClosePtr_t g_originalCExoEncapsulatedFile_ReleaseSyncClose = nullptr;
+
+void __fastcall Hook_CExoEncapsulatedFile_ReleaseSyncClose(int* thisPtr, void* edxDummy) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalCExoEncapsulatedFile_ReleaseSyncClose(thisPtr);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CExoEncapsulatedFile_ReleaseSyncClose: " + std::to_string(duration.count()) + " μs");
+}
+
+typedef void (__thiscall* CExoEncapsulatedFile_ReleaseAsyncClosePtr_t)(int* thisPtr);
+CExoEncapsulatedFile_ReleaseAsyncClosePtr_t g_originalCExoEncapsulatedFile_ReleaseAsyncClose = nullptr;
+
+void __fastcall Hook_CExoEncapsulatedFile_ReleaseAsyncClose(int* thisPtr, void* edxDummy) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalCExoEncapsulatedFile_ReleaseAsyncClose(thisPtr);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CExoEncapsulatedFile_ReleaseAsyncClose: " + std::to_string(duration.count()) + " μs");
+}
+
+typedef uint32_t (__thiscall* CExoEncapsulatedFile_GetResourceSizePtr_t)(int thisPtr, uint32_t resourceId);
+CExoEncapsulatedFile_GetResourceSizePtr_t g_originalCExoEncapsulatedFile_GetResourceSize = nullptr;
+
+uint32_t __fastcall Hook_CExoEncapsulatedFile_GetResourceSize(int thisPtr, void* edxDummy, uint32_t resourceId) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t result = g_originalCExoEncapsulatedFile_GetResourceSize(thisPtr, resourceId);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CExoEncapsulatedFile_GetResourceSize: " + std::to_string(duration.count())+ " μs");
+    return result;
+}
+
+typedef uint32_t (__thiscall* CExoEncapsulatedFile_ReadResourceSyncPtr_t)(int thisPtr, uint32_t resourceId, int buffer, uint32_t size);
+CExoEncapsulatedFile_ReadResourceSyncPtr_t g_originalCExoEncapsulatedFile_ReadResourceSync = nullptr;
+
+uint32_t __fastcall Hook_CExoEncapsulatedFile_ReadResourceSync(int thisPtr, void* edxDummy, uint32_t resourceId, int buffer, uint32_t size) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t result = g_originalCExoEncapsulatedFile_ReadResourceSync(thisPtr, resourceId, buffer, size);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CExoEncapsulatedFile_ReadResourceSync: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t (__thiscall* CExoEncapsulatedFile_ReadResourceAsyncPtr_t)(int thisPtr, uint32_t resourceId, int buffer, uint32_t size);
+CExoEncapsulatedFile_ReadResourceAsyncPtr_t g_originalCExoEncapsulatedFile_ReadResourceAsync = nullptr;
+
+uint32_t __fastcall Hook_CExoEncapsulatedFile_ReadResourceAsync(int thisPtr, void* edxDummy, uint32_t resourceId, int buffer, uint32_t size) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t result = g_originalCExoEncapsulatedFile_ReadResourceAsync(thisPtr, resourceId, buffer, size);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CExoEncapsulatedFile_ReadResourceAsync: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t (__thiscall* CExoEncapsulatedFile_OpenSyncHandlePtr_t)(int thisPtr, uint32_t resourceType);
+CExoEncapsulatedFile_OpenSyncHandlePtr_t g_originalCExoEncapsulatedFile_OpenSyncHandle = nullptr;
+
+uint32_t __fastcall Hook_CExoEncapsulatedFile_OpenSyncHandle(int thisPtr, void* edxDummy, uint32_t resourceType) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t result = g_originalCExoEncapsulatedFile_OpenSyncHandle(thisPtr, resourceType);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CExoEncapsulatedFile_OpenSyncHandle: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t (__thiscall* CExoEncapsulatedFile_OpenAsyncHandlePtr_t)(int thisPtr, uint32_t resourceType);
+CExoEncapsulatedFile_OpenAsyncHandlePtr_t g_originalCExoEncapsulatedFile_OpenAsyncHandle = nullptr;
+
+uint32_t __fastcall Hook_CExoEncapsulatedFile_OpenAsyncHandle(int thisPtr, void* edxDummy, uint32_t resourceType) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t result = g_originalCExoEncapsulatedFile_OpenAsyncHandle(thisPtr, resourceType);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CExoEncapsulatedFile_OpenAsyncHandle: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef void (__thiscall* CExoResourceImageFile_ReleaseSyncClosePtr_t)(int* thisPtr);
+CExoResourceImageFile_ReleaseSyncClosePtr_t g_originalCExoResourceImageFile_ReleaseSyncClose = nullptr;
+
+void __fastcall Hook_CExoResourceImageFile_ReleaseSyncClose(int* thisPtr, void* edxDummy) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalCExoResourceImageFile_ReleaseSyncClose(thisPtr);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CExoResourceImageFile_ReleaseSyncClose: " + std::to_string(duration.count()) + " μs");
+}
+
+typedef uint32_t (__thiscall* CExoResourceImageFile_GetResourceSizePtr_t)(int thisPtr, uint32_t resourceId);
+CExoResourceImageFile_GetResourceSizePtr_t g_originalCExoResourceImageFile_GetResourceSize = nullptr;
+
+uint32_t __fastcall Hook_CExoResourceImageFile_GetResourceSize(int thisPtr, void* edxDummy, uint32_t resourceId) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t result = g_originalCExoResourceImageFile_GetResourceSize(thisPtr, resourceId);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CExoResourceImageFile_GetResourceSize: " + std::to_string(duration.count())+ " μs");
+    return result;
+}
+
+typedef uint32_t (__thiscall* CExoResourceImageFile_ReadResourceSyncPtr_t)(int thisPtr, uint32_t resourceId, int buffer, uint32_t size);
+CExoResourceImageFile_ReadResourceSyncPtr_t g_originalCExoResourceImageFile_ReadResourceSync = nullptr;
+
+uint32_t __fastcall Hook_CExoResourceImageFile_ReadResourceSync(int thisPtr, void* edxDummy, uint32_t resourceId, int buffer, uint32_t size) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t result = g_originalCExoResourceImageFile_ReadResourceSync(thisPtr, resourceId, buffer, size);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CExoResourceImageFile_ReadResourceSync: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t (__thiscall* CExoResourceImageFile_ReadResourceAsyncPtr_t)(int thisPtr, uint32_t resourceId, int buffer, uint32_t size);
+CExoResourceImageFile_ReadResourceAsyncPtr_t g_originalCExoResourceImageFile_ReadResourceAsync = nullptr;
+
+uint32_t __fastcall Hook_CExoResourceImageFile_ReadResourceAsync(int thisPtr, void* edxDummy, uint32_t resourceId, int buffer, uint32_t size) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t result = g_originalCExoResourceImageFile_ReadResourceAsync(thisPtr, resourceId, buffer, size);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CExoResourceImageFile_ReadResourceAsync: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef uint32_t (__thiscall* CExoResourceImageFile_LoadImagePtr_t)(int thisPtr, uint32_t resourceType);
+CExoResourceImageFile_LoadImagePtr_t g_originalCExoResourceImageFile_LoadImage = nullptr;
+
+uint32_t __fastcall Hook_CExoResourceImageFile_LoadImage(int thisPtr, void* edxDummy, uint32_t resourceType) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t result = g_originalCExoResourceImageFile_LoadImage(thisPtr, resourceType);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CExoResourceImageFile_LoadImage: " + std::to_string(duration.count()) + + " μs");
+    return result;
+}
 void InstallHook() {
     
     if (MH_Initialize() != MH_OK) {
@@ -1797,6 +2122,198 @@ void InstallHook() {
         (LPVOID*)&g_originalResourceFinalizeAsyncLoad) == MH_OK) {
             if (MH_EnableHook(targetAddr_ResourceFinalizeAsyncLoad) == MH_OK) {
                 Log("ResourceFinalizeAsyncLoad hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_Resource_AllocateLoadBuffer = (void*)(0x712f30);
+    if (MH_CreateHook(targetAddr_Resource_AllocateLoadBuffer, &Hook_Resource_AllocateLoadBuffer,
+        (LPVOID*)&g_originalResource_AllocateLoadBuffer) == MH_OK) {
+            if (MH_EnableHook(targetAddr_Resource_AllocateLoadBuffer) == MH_OK) {
+                Log("Resource_AllocateLoadBuffer hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CExoResFile_AddRefSyncOpen = (void*)(0x7270a0);
+    if (MH_CreateHook(targetAddr_CExoResFile_AddRefSyncOpen, &Hook_CExoResFile_AddRefSyncOpen,
+        (LPVOID*)&g_originalCExoResFile_AddRefSyncOpen) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CExoResFile_AddRefSyncOpen) == MH_OK) {
+                Log("CExoResFile_AddRefSyncOpen hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CExoResFile_AddRefAsyncOpen = (void*)(0x7270f0);
+    if (MH_CreateHook(targetAddr_CExoResFile_AddRefAsyncOpen, &Hook_CExoResFile_AddRefAsyncOpen,
+        (LPVOID*)&g_originalCExoResFile_AddRefAsyncOpen) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CExoResFile_AddRefAsyncOpen) == MH_OK) {
+                Log("CExoResFile_AddRefAsyncOpen hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CExoResFile_ReleaseSyncClose = (void*)(0x7272f0);
+    if (MH_CreateHook(targetAddr_CExoResFile_ReleaseSyncClose, &Hook_CExoResFile_ReleaseSyncClose,
+        (LPVOID*)&g_originalCExoResFile_ReleaseSyncClose) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CExoResFile_ReleaseSyncClose) == MH_OK) {
+                Log("CExoResFile_ReleaseSyncClose hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CExoResFile_ReleaseAsyncClose = (void*)(0x727340);
+    if (MH_CreateHook(targetAddr_CExoResFile_ReleaseAsyncClose, &Hook_CExoResFile_ReleaseAsyncClose,
+        (LPVOID*)&g_originalCExoResFile_ReleaseAsyncClose) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CExoResFile_ReleaseAsyncClose) == MH_OK) {
+                Log("CExoResFile_ReleaseAsyncClose hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CExoResFile_GetResourceSize = (void*)(0x727390);
+    if (MH_CreateHook(targetAddr_CExoResFile_GetResourceSize, &Hook_CExoResFile_GetResourceSize,
+        (LPVOID*)&g_originalCExoResFile_GetResourceSize) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CExoResFile_GetResourceSize) == MH_OK) {
+                Log("CExoResFile_GetResourceSize hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CExoResFile_ReadResourceSync = (void*)(0x727930);
+    if (MH_CreateHook(targetAddr_CExoResFile_ReadResourceSync, &Hook_CExoResFile_ReadResourceSync,
+        (LPVOID*)&g_originalCExoResFile_ReadResourceSync) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CExoResFile_ReadResourceSync) == MH_OK) {
+                Log("CExoResFile_ReadResourceSync hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CExoResFile_ReadResourceAsync = (void*)(0x7279f0);
+    if (MH_CreateHook(targetAddr_CExoResFile_ReadResourceAsync, &Hook_CExoResFile_ReadResourceAsync,
+        (LPVOID*)&g_originalCExoResFile_ReadResourceAsync) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CExoResFile_ReadResourceAsync) == MH_OK) {
+                Log("CExoResFile_ReadResourceAsync hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CExoResFile_OpenSyncHandle = (void*)(0x727450);
+    if (MH_CreateHook(targetAddr_CExoResFile_OpenSyncHandle, &Hook_CExoResFile_OpenSyncHandle,
+        (LPVOID*)&g_originalCExoResFile_OpenSyncHandle) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CExoResFile_OpenSyncHandle) == MH_OK) {
+                Log("CExoResFile_OpenSyncHandle hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CExoResFile_OpenAsyncHandle = (void*)(0x7275b0);
+    if (MH_CreateHook(targetAddr_CExoResFile_OpenAsyncHandle, &Hook_CExoResFile_OpenAsyncHandle,
+        (LPVOID*)&g_originalCExoResFile_OpenAsyncHandle) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CExoResFile_OpenAsyncHandle) == MH_OK) {
+                Log("CExoResFile_OpenAsyncHandle hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_ArchiveReaderShared_AddRefSyncOpen = (void*)(0x7295b0);
+    if (MH_CreateHook(targetAddr_ArchiveReaderShared_AddRefSyncOpen, &Hook_ArchiveReaderShared_AddRefSyncOpen,
+        (LPVOID*)&g_originalArchiveReaderShared_AddRefSyncOpen) == MH_OK) {
+            if (MH_EnableHook(targetAddr_ArchiveReaderShared_AddRefSyncOpen) == MH_OK) {
+                Log("ArchiveReaderShared_AddRefSyncOpen hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CExoEncapsulatedFile_AddRefAsyncOpen = (void*)(0x727bb0);
+    if (MH_CreateHook(targetAddr_CExoEncapsulatedFile_AddRefAsyncOpen, &Hook_CExoEncapsulatedFile_AddRefAsyncOpen,
+        (LPVOID*)&g_originalCExoEncapsulatedFile_AddRefAsyncOpen) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CExoEncapsulatedFile_AddRefAsyncOpen) == MH_OK) {
+                Log("CExoEncapsulatedFile_AddRefAsyncOpen hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CExoEncapsulatedFile_ReleaseSyncClose = (void*)(0x727d10);
+    if (MH_CreateHook(targetAddr_CExoEncapsulatedFile_ReleaseSyncClose, &Hook_CExoEncapsulatedFile_ReleaseSyncClose,
+        (LPVOID*)&g_originalCExoEncapsulatedFile_ReleaseSyncClose) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CExoEncapsulatedFile_ReleaseSyncClose) == MH_OK) {
+                Log("CExoEncapsulatedFile_ReleaseSyncClose hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CExoEncapsulatedFile_ReleaseAsyncClose = (void*)(0x727d50);
+    if (MH_CreateHook(targetAddr_CExoEncapsulatedFile_ReleaseAsyncClose, &Hook_CExoEncapsulatedFile_ReleaseAsyncClose,
+        (LPVOID*)&g_originalCExoEncapsulatedFile_ReleaseAsyncClose) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CExoEncapsulatedFile_ReleaseAsyncClose) == MH_OK) {
+                Log("CExoEncapsulatedFile_ReleaseAsyncClose hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CExoEncapsulatedFile_GetResourceSize = (void*)(0x727d90);
+    if (MH_CreateHook(targetAddr_CExoEncapsulatedFile_GetResourceSize, &Hook_CExoEncapsulatedFile_GetResourceSize,
+        (LPVOID*)&g_originalCExoEncapsulatedFile_GetResourceSize) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CExoEncapsulatedFile_GetResourceSize) == MH_OK) {
+                Log("CExoEncapsulatedFile_GetResourceSize hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CExoEncapsulatedFile_ReadResourceSync = (void*)(0x729370);
+    if (MH_CreateHook(targetAddr_CExoEncapsulatedFile_ReadResourceSync, &Hook_CExoEncapsulatedFile_ReadResourceSync,
+        (LPVOID*)&g_originalCExoEncapsulatedFile_ReadResourceSync) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CExoEncapsulatedFile_ReadResourceSync) == MH_OK) {
+                Log("CExoEncapsulatedFile_ReadResourceSync hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CExoEncapsulatedFile_ReadResourceAsync = (void*)(0x729420);
+    if (MH_CreateHook(targetAddr_CExoEncapsulatedFile_ReadResourceAsync, &Hook_CExoEncapsulatedFile_ReadResourceAsync,
+        (LPVOID*)&g_originalCExoEncapsulatedFile_ReadResourceAsync) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CExoEncapsulatedFile_ReadResourceAsync) == MH_OK) {
+                Log("CExoEncapsulatedFile_ReadResourceAsync hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CExoEncapsulatedFile_OpenSyncHandle = (void*)(0x727e30);
+    if (MH_CreateHook(targetAddr_CExoEncapsulatedFile_OpenSyncHandle, &Hook_CExoEncapsulatedFile_OpenSyncHandle,
+        (LPVOID*)&g_originalCExoEncapsulatedFile_OpenSyncHandle) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CExoEncapsulatedFile_OpenSyncHandle) == MH_OK) {
+                Log("CExoEncapsulatedFile_OpenSyncHandle hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CExoEncapsulatedFile_OpenAsyncHandle = (void*)(0x728230);
+    if (MH_CreateHook(targetAddr_CExoEncapsulatedFile_OpenAsyncHandle, &Hook_CExoEncapsulatedFile_OpenAsyncHandle,
+        (LPVOID*)&g_originalCExoEncapsulatedFile_OpenAsyncHandle) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CExoEncapsulatedFile_OpenAsyncHandle) == MH_OK) {
+                Log("CExoEncapsulatedFile_OpenAsyncHandle hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CExoResourceImageFile_ReleaseSyncClose = (void*)(0x729650);
+    if (MH_CreateHook(targetAddr_CExoResourceImageFile_ReleaseSyncClose, &Hook_CExoResourceImageFile_ReleaseSyncClose,
+        (LPVOID*)&g_originalCExoResourceImageFile_ReleaseSyncClose) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CExoResourceImageFile_ReleaseSyncClose) == MH_OK) {
+                Log("CExoResourceImageFile_ReleaseSyncClose hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CExoResourceImageFile_GetResourceSize = (void*)(0x7296e0);
+    if (MH_CreateHook(targetAddr_CExoResourceImageFile_GetResourceSize, &Hook_CExoResourceImageFile_GetResourceSize,
+        (LPVOID*)&g_originalCExoResourceImageFile_GetResourceSize) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CExoResourceImageFile_GetResourceSize) == MH_OK) {
+                Log("CExoResourceImageFile_GetResourceSize hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CExoResourceImageFile_ReadResourceSync = (void*)(0x729ae0);
+    if (MH_CreateHook(targetAddr_CExoResourceImageFile_ReadResourceSync, &Hook_CExoResourceImageFile_ReadResourceSync,
+        (LPVOID*)&g_originalCExoResourceImageFile_ReadResourceSync) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CExoResourceImageFile_ReadResourceSync) == MH_OK) {
+                Log("CExoResourceImageFile_ReadResourceSync hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CExoResourceImageFile_ReadResourceAsync = (void*)(0x729b80);
+    if (MH_CreateHook(targetAddr_CExoResourceImageFile_ReadResourceAsync, &Hook_CExoResourceImageFile_ReadResourceAsync,
+        (LPVOID*)&g_originalCExoResourceImageFile_ReadResourceAsync) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CExoResourceImageFile_ReadResourceAsync) == MH_OK) {
+                Log("CExoResourceImageFile_ReadResourceAsync hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_CExoResourceImageFile_LoadImage = (void*)(0x729790);
+    if (MH_CreateHook(targetAddr_CExoResourceImageFile_LoadImage, &Hook_CExoResourceImageFile_LoadImage,
+        (LPVOID*)&g_originalCExoResourceImageFile_LoadImage) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CExoResourceImageFile_LoadImage) == MH_OK) {
+                Log("CExoResourceImageFile_LoadImage hook installed successfully");
             } else { Log("Failed to enable hook"); }
         } else { Log("Failed to create hook"); }
 

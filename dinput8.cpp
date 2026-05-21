@@ -9,6 +9,7 @@
 #define LOG_LOADSCREEN_ONLY 0
 #define SKIP_PRELOAD_INITIAL_ASSETS_WRAPPER 1
 #define SKIP_LOADING_SCREEN_UPDATE_FRAME_IN_MODULE_CHUNK_LOAD_CORE 0
+#define HOOK_GUI_DEEP_GFF_TIMING 0
 
 // DirectInput8 proxy
 typedef HRESULT(WINAPI *DICREATE)(HINSTANCE, DWORD, REFIID, LPVOID*, LPUNKNOWN);
@@ -952,6 +953,118 @@ void __fastcall Hook_GUI_InitWidgetFromGFF(int* thisPtr, void* edxDummy, int par
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     Log("GUI_InitWidgetFromGFF: " + std::to_string(duration.count()) + " μs");
+}
+
+typedef void (__thiscall* GUI_BindChildStructByNamePtr_t)(int thisPtr, int param1, int param2, int param3, int param4);
+GUI_BindChildStructByNamePtr_t g_originalGUI_BindChildStructByName = nullptr;
+
+void __fastcall Hook_GUI_BindChildStructByName(int thisPtr, void* edxDummy, int param1, int param2, int param3, int param4) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalGUI_BindChildStructByName(thisPtr, param1, param2, param3, param4);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("GUI_BindChildStructByName: " + std::to_string(duration.count()) + " Î¼s");
+}
+
+typedef void (__thiscall* GUI_BaseControlSetupPtr_t)(int thisPtr, int param1, int param2);
+GUI_BaseControlSetupPtr_t g_originalGUI_BaseControlSetup = nullptr;
+
+void __fastcall Hook_GUI_BaseControlSetup(int thisPtr, void* edxDummy, int param1, int param2) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalGUI_BaseControlSetup(thisPtr, param1, param2);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("GUI_BaseControlSetup: " + std::to_string(duration.count()) + " Î¼s");
+}
+
+typedef void (__thiscall* GUI_CommonBaseBinderPtr_t)(int thisPtr, int param1, int param2);
+GUI_CommonBaseBinderPtr_t g_originalGUI_CommonBaseBinder = nullptr;
+
+void __fastcall Hook_GUI_CommonBaseBinder(int thisPtr, void* edxDummy, int param1, int param2) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalGUI_CommonBaseBinder(thisPtr, param1, param2);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("GUI_CommonBaseBinder: " + std::to_string(duration.count()) + " Î¼s");
+}
+
+typedef void (__thiscall* GUI_ListBoxBindProtoItemPtr_t)(int thisPtr, int param1, int param2);
+GUI_ListBoxBindProtoItemPtr_t g_originalGUI_ListBoxBindProtoItem = nullptr;
+
+void __fastcall Hook_GUI_ListBoxBindProtoItem(int thisPtr, void* edxDummy, int param1, int param2) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalGUI_ListBoxBindProtoItem(thisPtr, param1, param2);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("GUI_ListBoxBindProtoItem: " + std::to_string(duration.count()) + " Î¼s");
+}
+
+typedef unsigned char (__thiscall* GFF_ReadBoolFieldByNamePtr_t)(int gffPtr, int structPtr, const char* fieldName, int* foundOut, unsigned char defaultValue);
+GFF_ReadBoolFieldByNamePtr_t g_originalGFF_ReadBoolFieldByName = nullptr;
+
+unsigned char __fastcall Hook_GFF_ReadBoolFieldByName(int gffPtr, void* edxDummy, int structPtr, const char* fieldName, int* foundOut, unsigned char defaultValue) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    unsigned char result = g_originalGFF_ReadBoolFieldByName(gffPtr, structPtr, fieldName, foundOut, defaultValue);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("GFF_ReadBoolFieldByName: " + std::to_string(duration.count()) + " Î¼s");
+    return result;
+}
+
+typedef int (__thiscall* GFF_ReadIntFieldByNamePtr_t)(int gffPtr, int structPtr, const char* fieldName, int* foundOut, int defaultValue);
+GFF_ReadIntFieldByNamePtr_t g_originalGFF_ReadIntFieldByName = nullptr;
+
+int __fastcall Hook_GFF_ReadIntFieldByName(int gffPtr, void* edxDummy, int structPtr, const char* fieldName, int* foundOut, int defaultValue) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    int result = g_originalGFF_ReadIntFieldByName(gffPtr, structPtr, fieldName, foundOut, defaultValue);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("GFF_ReadIntFieldByName: " + std::to_string(duration.count()) + " Î¼s");
+    return result;
+}
+
+typedef uint32_t* (__thiscall* GFF_ReadVector3FieldByNamePtr_t)(int gffPtr, uint32_t* outVec, int structPtr, const char* fieldName, int* foundOut, uint32_t* defaultVec);
+GFF_ReadVector3FieldByNamePtr_t g_originalGFF_ReadVector3FieldByName = nullptr;
+
+uint32_t* __fastcall Hook_GFF_ReadVector3FieldByName(int gffPtr, void* edxDummy, uint32_t* outVec, int structPtr, const char* fieldName, int* foundOut, uint32_t* defaultVec) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    uint32_t* result = g_originalGFF_ReadVector3FieldByName(gffPtr, outVec, structPtr, fieldName, foundOut, defaultVec);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("GFF_ReadVector3FieldByName: " + std::to_string(duration.count()) + " Î¼s");
+    return result;
+}
+
+typedef int (__thiscall* GFF_LookupFieldLabelByNamePtr_t)(int gffPtr, int structPtr, const char* fieldName);
+GFF_LookupFieldLabelByNamePtr_t g_originalGFF_LookupFieldLabelByName = nullptr;
+
+int __fastcall Hook_GFF_LookupFieldLabelByName(int gffPtr, void* edxDummy, int structPtr, const char* fieldName) {
+#if HOOK_GUI_DEEP_GFF_TIMING
+    auto start = std::chrono::high_resolution_clock::now();
+#endif
+
+    int result = g_originalGFF_LookupFieldLabelByName(gffPtr, structPtr, fieldName);
+
+#if HOOK_GUI_DEEP_GFF_TIMING
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("GFF_LookupFieldLabelByName: " + std::to_string(duration.count()) + " Î¼s");
+#endif
+    return result;
 }
 
 typedef uint32_t (__thiscall* ResourceEnsureLoadedPtr_t)(int thisPtr, int resourceEntry);
@@ -2060,6 +2173,75 @@ void InstallHook() {
                 Log("GUI_InitWidgetFromGFF hook installed successfully");
             } else { Log("Failed to enable hook"); }
         } else { Log("Failed to create hook"); }
+
+    void* targetAddr_GUI_BindChildStructByName = (void*)(0x00418da0);
+    if (MH_CreateHook(targetAddr_GUI_BindChildStructByName, &Hook_GUI_BindChildStructByName,
+        (LPVOID*)&g_originalGUI_BindChildStructByName) == MH_OK) {
+            if (MH_EnableHook(targetAddr_GUI_BindChildStructByName) == MH_OK) {
+                Log("GUI_BindChildStructByName hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_GUI_BaseControlSetup = (void*)(0x004188e0);
+    if (MH_CreateHook(targetAddr_GUI_BaseControlSetup, &Hook_GUI_BaseControlSetup,
+        (LPVOID*)&g_originalGUI_BaseControlSetup) == MH_OK) {
+            if (MH_EnableHook(targetAddr_GUI_BaseControlSetup) == MH_OK) {
+                Log("GUI_BaseControlSetup hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_GUI_CommonBaseBinder = (void*)(0x00418f20);
+    if (MH_CreateHook(targetAddr_GUI_CommonBaseBinder, &Hook_GUI_CommonBaseBinder,
+        (LPVOID*)&g_originalGUI_CommonBaseBinder) == MH_OK) {
+            if (MH_EnableHook(targetAddr_GUI_CommonBaseBinder) == MH_OK) {
+                Log("GUI_CommonBaseBinder hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_GUI_ListBoxBindProtoItem = (void*)(0x00420180);
+    if (MH_CreateHook(targetAddr_GUI_ListBoxBindProtoItem, &Hook_GUI_ListBoxBindProtoItem,
+        (LPVOID*)&g_originalGUI_ListBoxBindProtoItem) == MH_OK) {
+            if (MH_EnableHook(targetAddr_GUI_ListBoxBindProtoItem) == MH_OK) {
+                Log("GUI_ListBoxBindProtoItem hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+#if HOOK_GUI_DEEP_GFF_TIMING
+    void* targetAddr_GFF_ReadBoolFieldByName = (void*)(0x00718a00);
+    if (MH_CreateHook(targetAddr_GFF_ReadBoolFieldByName, &Hook_GFF_ReadBoolFieldByName,
+        (LPVOID*)&g_originalGFF_ReadBoolFieldByName) == MH_OK) {
+            if (MH_EnableHook(targetAddr_GFF_ReadBoolFieldByName) == MH_OK) {
+                Log("GFF_ReadBoolFieldByName hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_GFF_ReadIntFieldByName = (void*)(0x00718c80);
+    if (MH_CreateHook(targetAddr_GFF_ReadIntFieldByName, &Hook_GFF_ReadIntFieldByName,
+        (LPVOID*)&g_originalGFF_ReadIntFieldByName) == MH_OK) {
+            if (MH_EnableHook(targetAddr_GFF_ReadIntFieldByName) == MH_OK) {
+                Log("GFF_ReadIntFieldByName hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+    void* targetAddr_GFF_ReadVector3FieldByName = (void*)(0x00719520);
+    if (MH_CreateHook(targetAddr_GFF_ReadVector3FieldByName, &Hook_GFF_ReadVector3FieldByName,
+        (LPVOID*)&g_originalGFF_ReadVector3FieldByName) == MH_OK) {
+            if (MH_EnableHook(targetAddr_GFF_ReadVector3FieldByName) == MH_OK) {
+                Log("GFF_ReadVector3FieldByName hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+
+#endif
+
+#if HOOK_GUI_DEEP_GFF_TIMING
+    void* targetAddr_GFF_LookupFieldLabelByName = (void*)(0x007178e0);
+    if (MH_CreateHook(targetAddr_GFF_LookupFieldLabelByName, &Hook_GFF_LookupFieldLabelByName,
+        (LPVOID*)&g_originalGFF_LookupFieldLabelByName) == MH_OK) {
+            if (MH_EnableHook(targetAddr_GFF_LookupFieldLabelByName) == MH_OK) {
+                Log("GFF_LookupFieldLabelByName hook installed successfully");
+            } else { Log("Failed to enable hook"); }
+        } else { Log("Failed to create hook"); }
+#endif
 
     void* targetAddr_ResourceEnsureLoaded = (void*)(0x711c20);
     if (MH_CreateHook(targetAddr_ResourceEnsureLoaded, &Hook_ResourceEnsureLoaded,

@@ -23,7 +23,7 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 |`FUN_00407920`| **GameMain** | Most likely the main function of the game | no |
 |`FUN_00781be0` | **Engine** | Seems to have the main engine logic | no |
 |`FUN_00703f30` | **ProcessResourceQueue** | Empties a 64 KB ring buffer of loading-time "packets," handing each packet to the right handler (special handler if the packet starts with BN, otherwise the generic resource loader) until the queue is empty. | yes |
-|`FUN_00781840` | **ResourceQueue_UnpackAndTrace** | Unpacks a single resource-queue packet with tracer setup/flush, then runs the packet dispatch through the Concurrency scheduler path. | yes |
+|`FUN_00781840` | **ResourceQueue_UnpackAndTrace** | Traces one queued packet, then dispatches `P` packets to `PPacketHandler` and `S` packets to `SPacketHandler`. | yes |
 |`FUN_005314e0` | **ResourcePacketDispatcher** | Core dispatcher that examines the first byte of each packet (e.g. 's' vs. 'p'), checks the subsystem's enable flags, and forwards the packet to the appropriate handler routine. | yes |
 |`FUN_00810cf0` | **PPacketHandler** | Handles all 'P'-prefix packets, dispatching on major/minor subtype, with buffer checks and tracing. | yes |
 |`FUN_00884530` | **SPacketHandler** | Likewise, handles all 'S'-prefix packets (e.g. scripts or static data), routing to the appropriate subsystem. | yes |
@@ -48,6 +48,12 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 |`FUN_00811450` | **ModuleHandler** | Loads and initializes each game module, bringing in level data, assets, and scripts needed for the world. | yes |
 |`FUN_0080deb0` | **GameObjUpdate** | Processes incoming object-update packets, creating or refreshing in-game entities and syncing their state during the loading phase. | yes |
 |`FUN_007BE4C0` | **ModuleChunkLoadCore** | Allocates and parses a module's sub-chunks, updates the loading screen between groups, and marks the chunk as done. | yes |
+|`FUN_0073fea0` | **AppState_GetGuiContext** | Returns the GUI/context pointer stored at offset `0x274` inside the app-state child object. `ModuleChunkLoadCore` uses this once to populate its GUI context before constructing UI chunks; other loading/UI code also calls it. | yes |
+|`FUN_00740c60` | **AppState_GetLoadProgressByte** | Reads one byte from the app-state child object's load-progress table at `0x3e4 + index`. `ModuleChunkLoadCore` calls this with indexes `3`, `1`, and `0` before each loading-frame update to compute the next load-bar value. | yes |
+|`FUN_0091c860` | **Runtime_FloatToInt_ST0** | Compiler/runtime helper that converts the current x87 `ST0` floating-point value to an integer. In `ModuleChunkLoadCore`, it rounds the computed load-bar value before it is applied. | yes |
+|`FUN_007405d0` | **AppState_SetLoadBarValue** | Wrapper around the load-bar setter. It forwards the computed value and update flag to the app-state child object, then traces `Load Bar = %d` when a load-bar GUI object is present. | yes |
+|`FUN_007bc8f0` | **CSWGuiFade_SetTransitionState** | Updates a fade GUI object's target color/vector, screen dimensions, alpha/progress fields, mode flag, duration, and start timestamp. `ModuleChunkLoadCore` uses this on the conditional 3D scene/fade path. | yes |
+|`FUN_0040dac0` | **LoadingScreenFadeUpdateFrame** | Creates the loading-screen fade GUI if needed, updates its 3D scene state, sets fade alpha/progress, draws one loading-screen frame, and exits its guarded loading-screen section. | yes |
 |`FUN_008c0cb0` | **CSWGuiLoadModuleDebugMenu_Ctor** | Constructs and initializes the Load Module Debug Menu. Sets the vftable, initializes standard debug labels (e.g., LB_OPTIONS, LBL_BUILD), formats build/version text, scans module directories, filters valid module files (e.g., _s.rim), merges/sorts results, and populates the module selection list. | yes |
 |`FUN_008bfb60` | **CSWGuiPowersFeatsSkillsDebugMenu_Ctor** | Constructs and initializes the Powers/Feats/Skills Debug Menu. Sets the vftable, initializes debug UI labels and build info, and performs menu-specific setup via internal initialization routines. | yes |
 |`FUN_008bba80` | **CSWGuiDialogCinematic_Ctor** | Constructs and initializes the cinematic dialog GUI. Sets the CSWGuiDialogCinematic vftable, loads dialog_p resources, initializes the replies/message labels (LB_REPLIES, LBL_MESSAGE), configures multiple reply-related child widgets, creates auxiliary dialog state via FUN_008bb5d0, and marks the GUI instance as active. | yes |
@@ -72,9 +78,12 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 |`FUN_0055a460` | **LoadOrCreateAreaAndInit** | High-level scene/area loader. Decides whether to reuse or create a new area object, initializes it, and begins environment/UI setup. Delegates actual asset streaming to deeper loader functions. | no |
 |`FUN_00647050` | **EnqueueStreamingRequest** | Builds a small command packet (opcode 0x50) and pushes it into the streaming system's ring buffer via a vtable call to the streaming manager at DAT_00a1b4a4 + 8. This is the entry point for loading/streaming assets from disk. | no |
 |`FUN_00637270` | **RequestResourceStream** | Prepares parameters for a resource/asset request, does some validation, and then calls the streaming enqueue function | no |
-|`FUN_00401730` | **InitResourceManager** | Allocates and initializes the core resource manager structure, creating subcomponents for streaming, resource metadata, and asset caches, and setting up internal state for game resource loading. | no |
+|`FUN_00401730` | **InitResourceManager** | Allocates the root resource-manager object: client app at `+0x4`, later-filled loading/resource manager pointer at `+0x8`, two 0x184-byte resource tables at `+0xc/+0x10`, load-state object at `+0x14`, tick count at `+0x18`, and a 0x40000-byte scratch/queue buffer at `+0x0`. | no |
+|`FUN_00401cf0` | **ResourceRoot_EnsureScratchBuffer** | Lazily allocates the root object's 0x40000-byte buffer at offset `+0x0`. | no |
 |`FUN_0073ef30` | **InitClientExoApp** | Sets up the game's core client application object | no |
 |`FUN_00780460` | **InitClientCoreSystems** | Allocates and zero-initializes the main client game object, then sets up dozens of subsystems (resource queues, streaming buffers, graphics/audio settings, network structures, and various runtime managers). | no |
+|`FUN_0073f7f0` | **CClientExoApp_GetResourceQueue** | `CClientExoApp` vtable slot `+0x10`; returns the queue pointer at `clientCore + 0x10`, which is passed to `ProcessResourceQueue`. | no |
+|`FUN_0073f930` | **CClientExoApp_QueuePacketDispatch** | `CClientExoApp` vtable slot `+0x4`; forwards packet work into `ResourceQueue_UnpackAndTrace`. | no |
 |`FUN_00934C70` | **OpenGameAsset** | Low Level call to open a game asset | no |
 |`FUN_0091caeb` | **_fopen** | C standard library | yes |
 |`FUN_00475ab0` | **OpenOrStreamGameFile** | Opens a game asset or streams it | no |
@@ -86,7 +95,9 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 |`FUN_005205f0` | **BuildEventFromConfigEntry** | Reads one "EventQueue" entry, fills common fields (tag/ids), and deserializes a typed "EventData" payload based on EventId (allocating and constructing the appropriate struct). Returns 1 on success, 0 for invalid EventId | no |
 |`FUN_00423AB0` | **ParseTXIAndBuildTextureController** | Parses TXI directives for a texture: creates the appropriate procedural texture controller from proceduretype and applies all TXI flags/params (mipmaps, clamp, bump, envmap, etc.). Finally lets the controller parse its own extra options. | no |
 |`FUN_00423000` | **CAurTextureBasic::Ctor** | Constructs a texture object, sets defaults, stores names, allocates helper state. | no |
-|`FUN_00424B10` | **Texture_ApplyTXIAndBuildController** | Constructs a texture object, sets defaults, stores names, allocates helper state | no |
+|`FUN_00424B10` | **Texture_ApplyTXIAndBuildController** | Opens or reads a texture's TXI sidecar/in-memory TXI text, parses each directive with `ParseTXIAndBuildTextureController`, and builds/removes the procedural texture controller state. | yes |
+|`FUN_0045BF50` | **Texture_ApplyTXIBlendingMode** | Opens or reads the same TXI sidecar family, extracts the `blending` directive, and applies additive/punchthrough render state across related mesh/material children. | yes |
+|`FUN_004DA3F0` | **Texture_ApplyTXIMaterialDirectives** | Opens or reads a texture TXI sidecar/in-memory TXI text and feeds each trimmed line into the material directive parser at `FUN_004dab20`. | yes |
 |`FUN_00704060` | **NetLayer::SendMessageToPlayer** | Writes a message into the player's outgoing network buffer. Validates available space to avoid overflow (logging a detailed dump if it would exceed the buffer), copies the message length and payload into the queue, and advances the write pointer. This is what sends packets to ProcessResourceQueue | no |
 |`FUN_00665280` | **SendMessageWithSHeader** | This function constructs and sends a network message prefixed with the byte 0x53 to a specific player. It allocates a buffer, copies data from a source function (FUN_00734010), and sends it using NetLayer::SendMessageToPlayer. | no |
 |`FUN_00884450` | **SendMessageWithSHeader2** | This function constructs and sends a network message prefixed with the byte 0x73, which is different from the 0x53 message sent by FUN_00665280. It copies the payload from a source function (FUN_00734010). | no |
@@ -224,44 +235,122 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
                     - ModuleChunkLoadCore
                         - InitializeGameUI
 
+#### Resource manager object graph
+
+`GameMain` allocates the root object with `InitResourceManager`, stores it in `DAT_00a1b4a4`, and the main loop then repeatedly consults its `+0x4`, `+0x8`, and `+0x14` children during loading.
+
+Known root layout:
+
+| Offset | Meaning | Evidence |
+|---|---|---|
+| `+0x0` | 0x40000-byte root scratch/queue buffer | `InitResourceManager` clears it, then `ResourceRoot_EnsureScratchBuffer` allocates it if null. |
+| `+0x4` | `CClientExoApp*` | Allocated as 8 bytes by `InitClientExoApp`; vtable is `CClientExoApp::vftable` at `0x99d684`, child core object at `+0x4`. |
+| `+0x8` | Loading/resource manager pointer | Starts null in `InitResourceManager`; later `loadingscreen`, `Engine`, and `EnqueueStreamingRequest` use it heavily. It owns loading-state helpers and an embedded queue at `+0x10040`. |
+| `+0xc` | 0x184-byte resource table/cache | Allocated by `FUN_0051b830`, which zeroes 0x60 dwords and clears `+0x180`. |
+| `+0x10` | Second 0x184-byte resource table/cache | Same constructor as `+0xc`; likely paired active/secondary resource table. |
+| `+0x14` | 0x3c-byte load-state object | Constructed by `FUN_004018c0`; fields drive load state, module indexes, resource names, and completion flag checks. |
+| `+0x18` | `GetTickCount()` value | Stored during root construction. |
+| `+0x1c` | Temporary graphics/loading flag | `FUN_0040bc40` stores the previous state of flag `2` here and `FUN_0040bcf0` restores/toggles it. |
+
+`CClientExoApp` vtable entries that matter for the queue path:
+
+| Vtable offset | Function | Meaning |
+|---|---|---|
+| `+0x4` | `FUN_0073f930` | Wrapper around `ResourceQueue_UnpackAndTrace`. This is the generic packet-dispatch target reached from `ProcessResourceQueue` through the queue object's handler pointer. |
+| `+0x10` | `FUN_0073f7f0` | Returns `*(client + 0x4) + 0x10`, the queue object that `LoadingScreenUpdateFrame` passes to `ProcessResourceQueue`. |
+
+#### Resource queue flow
+
+`ProcessResourceQueue(queue, enabled)` is a drain, not a one-packet tick. If `enabled != 0`, it loops until `queue + 0x20000` (read offset) equals `queue + 0x20004` (write offset). Each packet is stored as:
+
+```text
+0x00000..0x0ffff  packet ring buffer bytes
++0x20000          read offset
++0x20004          write offset
++0x20008          generic packet handler object
++0x2000c          paired outgoing queue target used by NetLayer::SendMessageToPlayer
+```
+
+For each packet, the consumer reads a 4-byte payload length, checks for a `BN` prefix, and either calls `HandleBNPacket` or dispatches through `(*(queue + 0x20008))->vtable[+0x4]`, which currently resolves to the `ResourceQueue_UnpackAndTrace` path for normal resource packets.
+
+Producer side:
+
+```text
+RequestResourceStream / many FUN_0064xxxx helpers
+  -> EnqueueStreamingRequest
+      writes opcode 0x50 and subtype bytes
+      calls (*(DAT_00a1b4a4 + 8))->vtable[+0x10] as a prep/translation hook
+      calls NetLayer::SendMessageToPlayer
+          writes [length][payload] into the paired queue ring buffer
+```
+
+Pump side:
+
+```text
+GameMain idle frame:
+  if DAT_00a1b4a4 + 8 exists:
+      loadingscreenwrapper(DAT_00a1b4a4 + 8)
+      break early only when (*(DAT_00a1b4a4 + 0x14))[0] == 1
+
+LoadingScreenUpdateFrame(param2 == 1):
+  if DAT_00a1b4a4 + 8 exists:
+      loop once:
+          loadingscreenwrapper(DAT_00a1b4a4 + 8)
+          ProcessResourceQueue(CClientExoApp_GetResourceQueue(DAT_00a1b4a4 + 4), 0)  ; no drain
+  ProcessResourceQueue(CClientExoApp_GetResourceQueue(DAT_00a1b4a4 + 4), 0)
+```
+
+The artificial limit is therefore not inside `ProcessResourceQueue`; when the flag is `1`, the function drains everything currently available. The limit is around how often the outer loading/update frame asks the loading manager to produce/drain real work. The explicit calls from `LoadingScreenUpdateFrame` pass `0`, so their current value is probably timing/side-effect noise rather than queue throughput.
+
 #### ModuleChunkLoadCore timing read
-`ModuleChunkLoadCore` totals 1553.64ms over 4 calls, averaging 388.41ms per call. 
+Current parse run:
+
+```text
+python loadingscreen_timeparse.py "D:\SteamLibrary\steamapps\common\Knights of the Old Republic II\kotor2_log.txt"
+```
+
+`ModuleChunkLoadCore` totals 2347.15ms over 5 calls, averaging 469.43ms per call. Its parent chain is much larger: `ModuleHandler` totals 2684.47ms over 15 samples, while `PpacketHandler` totals 6337.81ms over 294 samples and `ResourceQueue_UnpackAndTrace` totals 6341.12ms over 305 samples. The outer loading screen hook totals 5322.90ms over 6030 samples.
 
 These timings are inclusive hook totals, not exclusive flamegraph time. Nested work is counted in both parent and child hooks, so phase totals should be read as attribution clues rather than values that add exactly to `ModuleChunkLoadCore`.
 
 The current strongest nested signals are:
 
-- `GUI_BindNamedWidget`: 734.30ms total over 2432 calls, averaging 0.30ms per call.
-- `GUI_FindAndBindControlByTag`: 692.13ms total over 2432 calls, averaging 0.28ms per call.
-- `OpenOrStreamGameFile`: 2493.42ms total over 2644 calls, averaging 0.94ms per call.
-- `fopen`: 1031.72ms total over 8951 calls, averaging 0.12ms per call.
+- `ResourceQueue_UnpackAndTrace`: 6341.12ms total over 305 calls, averaging 20.79ms per call.
+- `PpacketHandler`: 6337.81ms total over 294 calls, averaging 21.56ms per call.
+- `ProcessResourceQueue`: 6393.71ms total over 12564 calls, averaging 0.51ms per call.
+- `ResourceEnsureLoaded`: 3755.67ms total over 9502 calls, averaging 0.40ms per call.
+- `LooseFileRead`: 3272.76ms total over 30878 calls, averaging 0.11ms per call.
+- `OpenOrStreamGameFile`: 2850.51ms total over 3235 calls, averaging 0.88ms per call.
+- `GUI_BindNamedWidget`: 717.59ms total over 2997 calls, averaging 0.24ms per call.
+- `GUI_FindAndBindControlByTag`: 670.19ms total over 2997 calls, averaging 0.22ms per call.
+- `fopen`: 391.77ms total over 10652 calls, averaging 0.04ms per call.
 
 `GUI_BindNamedWidget` and `GUI_FindAndBindControlByTag` are nested, not additive. `GUI_BindNamedWidget` calls `GUI_FindAndBindControlByTag` first, then performs position/size scaling, `LBL_BAR*` special handling, and control registration. The high total is mostly from call volume and GFF tag lookup work.
 
 
 #### ModuleChunkLoadCore phase breakdown
-Ghidra shows five `LoadingScreenUpdateFrame(_DAT_00986da8, 0, 0)` calls inside `ModuleChunkLoadCore`. Those calls divide the function into the following constructor phases:
+Ghidra shows five `LoadingScreenUpdateFrame(_DAT_00986da8, 0, 0)` calls inside `ModuleChunkLoadCore`. The current run also has five `ModuleChunkLoadCore` samples, so the constructor totals line up cleanly as "one pass per module load" signals. The five update-frame calls themselves total 2270.60ms over 190 calls, averaging 11.95ms each, which means the frame/update path is no longer just a marker; it is a meaningful part of the load.
 
 | Phase | Ghidra boundary | Main work | Current direct timing signal |
 |---|---|---|---|
 | Phase 0 | Start to first `LoadingScreenUpdateFrame` | `DebugMenuConstructor`, `CSWGuiLoadModuleDebugMenu_Ctor`, `CSWGuiPowersFeatsSkillsDebugMenu_Ctor` | ~0ms |
-| Phase 1 | First to second `LoadingScreenUpdateFrame` | Debug/item/dialog/message box setup: `CSWGuiCreateDebugItemSubMenu_Ctor`, `CSWGuiExamine_Ctor`, `CSWGuiBarkBubble_Ctor`, `CSWGuiContainer_Ctor`, `CSWGuiDialogCinematic_Ctor`, `CSWGuiDialogComputerCamera_Ctor`, `CSWGuiMessageBox_Ctor`, `CSWGuiMessageBoxVariant_Ctor`, `CSWGuiSkillInfoBox_Ctor` | ~355ms, dominated by `CSWGuiMessageBox_Ctor` at 337.36ms |
-| Phase 2 | Second to third `LoadingScreenUpdateFrame` | Mid-size in-game UI: `CSWGuiFade_Ctor`, `CSWGuiInGameMenu_Ctor`, `CSWGuiInGamePause_Ctor`, `CSWGuiInGameSoloModeQuery_Ctor`, `CSWGuiInGameAreaTransition_Ctor`, optional `CSWGuiInGameMessages_Ctor`, `CSWGuiStore_Ctor`, `CSWGuiInGameEquip_Ctor`, `CSWGuiInGameInventory_Ctor` | ~197-200ms |
-| Phase 3 | Third to fourth `LoadingScreenUpdateFrame` | Character/status/main interface: `CSWGuiInGameCharacter_Ctor`, `CSWGuiStatusSummary_Ctor`, `InitializeGameUI` | ~213ms |
-| Phase 4 | Fourth to fifth `LoadingScreenUpdateFrame` | Late in-game panels: `CSWGuiInGameMap_Ctor`, `CSWGuiInGameAbilities_Ctor`, `CSWGuiInGameJournal_Ctor`, `CSWGuiInGameOptions_Ctor`, `CSWGuiPartySelection_Ctor`, `CSWGuiInGameGalaxyMap_Ctor` | ~292ms |
+| Phase 1 | First to second `LoadingScreenUpdateFrame` | Debug/item/dialog/message box setup: `CSWGuiCreateDebugItemSubMenu_Ctor`, `CSWGuiExamine_Ctor`, `CSWGuiBarkBubble_Ctor`, `CSWGuiContainer_Ctor`, `CSWGuiDialogCinematic_Ctor`, `CSWGuiDialogComputerCamera_Ctor`, `CSWGuiMessageBox_Ctor`, `CSWGuiMessageBoxVariant_Ctor`, `CSWGuiSkillInfoBox_Ctor` | ~153ms direct constructor time. Largest signals are `CSWGuiMessageBox_Ctor` at 73.28ms, `CSWGuiContainer_Ctor` at 36.20ms, and `CSWGuiBarkBubble_Ctor` at 31.37ms. |
+| Phase 2 | Second to third `LoadingScreenUpdateFrame` | Mid-size in-game UI: `CSWGuiFade_Ctor`, `CSWGuiInGameMenu_Ctor`, `CSWGuiInGamePause_Ctor`, `CSWGuiInGameSoloModeQuery_Ctor`, `CSWGuiInGameAreaTransition_Ctor`, optional `CSWGuiInGameMessages_Ctor`, `CSWGuiStore_Ctor`, `CSWGuiInGameEquip_Ctor`, `CSWGuiInGameInventory_Ctor` | ~414ms direct constructor time. Biggest pieces are `CSWGuiInGameMessages_Ctor` at 84.67ms, `CSWGuiInGameMenu_Ctor` at 82.56ms, `CSWGuiStore_Ctor` at 74.81ms, and `CSWGuiInGameSoloModeQuery_Ctor` at 70.05ms. |
+| Phase 3 | Third to fourth `LoadingScreenUpdateFrame` | Character/status/main interface: `CSWGuiInGameCharacter_Ctor`, `CSWGuiStatusSummary_Ctor`, `InitializeGameUI` | ~415ms direct constructor/init time: `CSWGuiInGameCharacter_Ctor` at 208.06ms, `InitializeGameUI` at 183.52ms, and `CSWGuiStatusSummary_Ctor` at 23.48ms. Because `InitializeGameUI` may overlap nested GUI work, do not add this phase directly against other GUI totals. |
+| Phase 4 | Fourth to fifth `LoadingScreenUpdateFrame` | Late in-game panels: `CSWGuiInGameMap_Ctor`, `CSWGuiInGameAbilities_Ctor`, `CSWGuiInGameJournal_Ctor`, `CSWGuiInGameOptions_Ctor`, `CSWGuiPartySelection_Ctor`, `CSWGuiInGameGalaxyMap_Ctor` | ~292ms direct constructor time, led by `CSWGuiInGameGalaxyMap_Ctor` at 129.63ms. The rest are medium-cost repeated panels: journal 34.66ms, map 31.98ms, party selection 31.03ms, abilities 40.09ms, options 24.53ms. |
 
 Current direct constructor ranking inside the phases:
 
-- `CSWGuiMessageBox_Ctor`: 337.36ms total, 30.67ms average over 11 calls.
-- `CSWGuiInGameGalaxyMap_Ctor`: 131.93ms total, 32.98ms average over 4 calls.
-- `CSWGuiInGameCharacter_Ctor`: 117.98ms total, 29.50ms average over 4 calls.
-- `InitializeGameUI`: 81.81ms total, 20.45ms average over 4 calls.
-- `CSWGuiInGameJournal_Ctor`: 52.04ms total, 13.01ms average over 4 calls.
-- `CSWGuiInGameSoloModeQuery_Ctor`: 45.95ms total, 11.49ms average over 4 calls.
-- `CSWGuiPartySelection_Ctor`: 42.34ms total, 10.58ms average over 4 calls.
-- `CSWGuiInGameAbilities_Ctor`: 40.20ms total, 10.05ms average over 4 calls.
+- `CSWGuiInGameCharacter_Ctor`: 208.06ms total, 41.61ms average over 5 calls.
+- `InitializeGameUI`: 183.52ms total, 36.70ms average over 5 calls.
+- `CSWGuiInGameGalaxyMap_Ctor`: 129.63ms total, 25.93ms average over 5 calls.
+- `CSWGuiInGameMessages_Ctor`: 84.67ms total, 8.47ms average over 10 calls.
+- `CSWGuiInGameMenu_Ctor`: 82.56ms total, 16.51ms average over 5 calls.
+- `CSWGuiStore_Ctor`: 74.81ms total, 14.96ms average over 5 calls.
+- `CSWGuiMessageBox_Ctor`: 73.28ms total, 7.33ms average over 10 calls.
+- `CSWGuiInGameSoloModeQuery_Ctor`: 70.05ms total, 14.01ms average over 5 calls.
 
-Current hypothesis: the best optimization target is probably not one GUI constructor's own logic. The latest run is heavily resource/file I/O shaped (`OpenOrStreamGameFile`, `fopen`, `GUI_InitWidgetFromGFF`), while `GUI_BindNamedWidget` / `GUI_FindAndBindControlByTag` remain the biggest repeated nested GUI path. 
+Current hypothesis: the best optimization target is probably still not one GUI constructor's own logic. The latest run is heavily resource/file I/O shaped (`ResourceEnsureLoaded`, `ResourceLoadFromArchiveSlot`, `LooseFileRead`, `OpenOrStreamGameFile`) while `GUI_BindNamedWidget` / `GUI_FindAndBindControlByTag` remain the biggest repeated nested GUI path. Phase work is useful for attribution, but the larger win is likely reducing repeated resource reads, loose-file/archive load cost, or repeated widget lookup/bind work.
 
 #### Archive resource load breakdown
 

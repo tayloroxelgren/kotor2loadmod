@@ -10,6 +10,12 @@
 #define SKIP_PRELOAD_INITIAL_ASSETS_WRAPPER 1
 #define SKIP_LOADING_SCREEN_UPDATE_FRAME_IN_MODULE_CHUNK_LOAD_CORE 0
 #define HOOK_GUI_DEEP_GFF_TIMING 0
+#define HOOK_APPSTATE_GET_GUI_CONTEXT_TIMING 0
+#define HOOK_APPSTATE_GET_LOAD_PROGRESS_BYTE_TIMING 0
+#define HOOK_RUNTIME_FLOAT_TO_INT_ST0_TIMING 0
+#define HOOK_APPSTATE_SET_LOAD_BAR_VALUE_TIMING 0
+#define HOOK_CSWGUIFADE_SET_TRANSITION_STATE_TIMING 0
+#define HOOK_LOADING_SCREEN_FADE_UPDATE_FRAME_TIMING 0
 
 // DirectInput8 proxy
 typedef HRESULT(WINAPI *DICREATE)(HINSTANCE, DWORD, REFIID, LPVOID*, LPUNKNOWN);
@@ -337,6 +343,45 @@ uint32_t __fastcall Hook_ModuleChunkLoadCore(int param1, void* edx) {
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     Log("ModuleChunkLoadCore: " + std::to_string(duration.count()) + " μs");
     return result;
+}
+
+typedef void (__thiscall* Texture_ApplyTXIAndBuildControllerPtr_t)(int* thisPtr, uint32_t textureName);
+Texture_ApplyTXIAndBuildControllerPtr_t g_originalTexture_ApplyTXIAndBuildController = nullptr;
+
+void __fastcall Hook_Texture_ApplyTXIAndBuildController(int* thisPtr, void* edxDummy, uint32_t textureName) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalTexture_ApplyTXIAndBuildController(thisPtr, textureName);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("Texture_ApplyTXIAndBuildController: " + std::to_string(duration.count()) + " Î¼s");
+}
+
+typedef void (__thiscall* Texture_ApplyTXIBlendingModePtr_t)(int* thisPtr, uint32_t textureName, int materialState);
+Texture_ApplyTXIBlendingModePtr_t g_originalTexture_ApplyTXIBlendingMode = nullptr;
+
+void __fastcall Hook_Texture_ApplyTXIBlendingMode(int* thisPtr, void* edxDummy, uint32_t textureName, int materialState) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalTexture_ApplyTXIBlendingMode(thisPtr, textureName, materialState);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("Texture_ApplyTXIBlendingMode: " + std::to_string(duration.count()) + " Î¼s");
+}
+
+typedef void (__thiscall* Texture_ApplyTXIMaterialDirectivesPtr_t)(int* thisPtr, uint32_t textureName);
+Texture_ApplyTXIMaterialDirectivesPtr_t g_originalTexture_ApplyTXIMaterialDirectives = nullptr;
+
+void __fastcall Hook_Texture_ApplyTXIMaterialDirectives(int* thisPtr, void* edxDummy, uint32_t textureName) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalTexture_ApplyTXIMaterialDirectives(thisPtr, textureName);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("Texture_ApplyTXIMaterialDirectives: " + std::to_string(duration.count()) + " Î¼s");
 }
 
 typedef void* (__fastcall* CSWGuiLoadModuleDebugMenu_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
@@ -734,6 +779,75 @@ void __cdecl Hook_LoadingScreenUpdateFrame(uint32_t param1,int param2,int param3
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     Log("LoadingScreenUpdateFrame: " + std::to_string(duration.count()) + " μs");
+}
+
+typedef uint32_t (__fastcall* AppState_GetGuiContextPtr_t)(void* thisPtr, void* edx);
+AppState_GetGuiContextPtr_t g_originalAppState_GetGuiContext = nullptr;
+
+uint32_t __fastcall Hook_AppState_GetGuiContext(void* thisPtr, void* edx){
+    auto start = std::chrono::high_resolution_clock::now();
+    uint32_t result = g_originalAppState_GetGuiContext(thisPtr, edx);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("AppState_GetGuiContext: " + std::to_string(duration.count()) + " Î¼s");
+    return result;
+}
+
+typedef unsigned char (__fastcall* AppState_GetLoadProgressBytePtr_t)(void* thisPtr, void* edx, int index);
+AppState_GetLoadProgressBytePtr_t g_originalAppState_GetLoadProgressByte = nullptr;
+
+unsigned char __fastcall Hook_AppState_GetLoadProgressByte(void* thisPtr, void* edx, int index){
+    auto start = std::chrono::high_resolution_clock::now();
+    unsigned char result = g_originalAppState_GetLoadProgressByte(thisPtr, edx, index);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("AppState_GetLoadProgressByte: " + std::to_string(duration.count()) + " Î¼s");
+    return result;
+}
+
+typedef int (__cdecl* Runtime_FloatToInt_ST0Ptr_t)();
+Runtime_FloatToInt_ST0Ptr_t g_originalRuntime_FloatToInt_ST0 = nullptr;
+
+int __cdecl Hook_Runtime_FloatToInt_ST0(){
+    auto start = std::chrono::high_resolution_clock::now();
+    int result = g_originalRuntime_FloatToInt_ST0();
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("Runtime_FloatToInt_ST0: " + std::to_string(duration.count()) + " Î¼s");
+    return result;
+}
+
+typedef void (__fastcall* AppState_SetLoadBarValuePtr_t)(void* thisPtr, void* edx, int value, int updateFlag);
+AppState_SetLoadBarValuePtr_t g_originalAppState_SetLoadBarValue = nullptr;
+
+void __fastcall Hook_AppState_SetLoadBarValue(void* thisPtr, void* edx, int value, int updateFlag){
+    auto start = std::chrono::high_resolution_clock::now();
+    g_originalAppState_SetLoadBarValue(thisPtr, edx, value, updateFlag);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("AppState_SetLoadBarValue: " + std::to_string(duration.count()) + " Î¼s");
+}
+
+typedef void (__fastcall* CSWGuiFade_SetTransitionStatePtr_t)(void* thisPtr, void* edx, int mode, uint32_t progress, uint32_t duration, uint32_t* targetColor);
+CSWGuiFade_SetTransitionStatePtr_t g_originalCSWGuiFade_SetTransitionState = nullptr;
+
+void __fastcall Hook_CSWGuiFade_SetTransitionState(void* thisPtr, void* edx, int mode, uint32_t progress, uint32_t duration, uint32_t* targetColor){
+    auto start = std::chrono::high_resolution_clock::now();
+    g_originalCSWGuiFade_SetTransitionState(thisPtr, edx, mode, progress, duration, targetColor);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto durationTime = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("CSWGuiFade_SetTransitionState: " + std::to_string(durationTime.count()) + " Î¼s");
+}
+
+typedef void (__fastcall* LoadingScreenFadeUpdateFramePtr_t)(void* thisPtr, void* edx);
+LoadingScreenFadeUpdateFramePtr_t g_originalLoadingScreenFadeUpdateFrame = nullptr;
+
+void __fastcall Hook_LoadingScreenFadeUpdateFrame(void* thisPtr, void* edx){
+    auto start = std::chrono::high_resolution_clock::now();
+    g_originalLoadingScreenFadeUpdateFrame(thisPtr, edx);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("LoadingScreenFadeUpdateFrame: " + std::to_string(duration.count()) + " Î¼s");
 }
 
 typedef void (__cdecl* ConfigParsePtr_t)(char* filename);
@@ -2005,6 +2119,90 @@ void InstallHook() {
             Log("Failed to create hook");
         }
 
+#if HOOK_APPSTATE_GET_GUI_CONTEXT_TIMING
+    void* targetAddr_AppState_GetGuiContext = (void*)(0x73fea0);
+    if (MH_CreateHook(targetAddr_AppState_GetGuiContext, &Hook_AppState_GetGuiContext,
+        (LPVOID*)&g_originalAppState_GetGuiContext) == MH_OK) {
+            if (MH_EnableHook(targetAddr_AppState_GetGuiContext) == MH_OK) {
+                Log("AppState_GetGuiContext hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+#endif
+
+#if HOOK_APPSTATE_GET_LOAD_PROGRESS_BYTE_TIMING
+    void* targetAddr_AppState_GetLoadProgressByte = (void*)(0x740c60);
+    if (MH_CreateHook(targetAddr_AppState_GetLoadProgressByte, &Hook_AppState_GetLoadProgressByte,
+        (LPVOID*)&g_originalAppState_GetLoadProgressByte) == MH_OK) {
+            if (MH_EnableHook(targetAddr_AppState_GetLoadProgressByte) == MH_OK) {
+                Log("AppState_GetLoadProgressByte hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+#endif
+
+#if HOOK_RUNTIME_FLOAT_TO_INT_ST0_TIMING
+    void* targetAddr_Runtime_FloatToInt_ST0 = (void*)(0x91c860);
+    if (MH_CreateHook(targetAddr_Runtime_FloatToInt_ST0, &Hook_Runtime_FloatToInt_ST0,
+        (LPVOID*)&g_originalRuntime_FloatToInt_ST0) == MH_OK) {
+            if (MH_EnableHook(targetAddr_Runtime_FloatToInt_ST0) == MH_OK) {
+                Log("Runtime_FloatToInt_ST0 hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+#endif
+
+#if HOOK_APPSTATE_SET_LOAD_BAR_VALUE_TIMING
+    void* targetAddr_AppState_SetLoadBarValue = (void*)(0x7405d0);
+    if (MH_CreateHook(targetAddr_AppState_SetLoadBarValue, &Hook_AppState_SetLoadBarValue,
+        (LPVOID*)&g_originalAppState_SetLoadBarValue) == MH_OK) {
+            if (MH_EnableHook(targetAddr_AppState_SetLoadBarValue) == MH_OK) {
+                Log("AppState_SetLoadBarValue hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+#endif
+
+#if HOOK_CSWGUIFADE_SET_TRANSITION_STATE_TIMING
+    void* targetAddr_CSWGuiFade_SetTransitionState = (void*)(0x7bc8f0);
+    if (MH_CreateHook(targetAddr_CSWGuiFade_SetTransitionState, &Hook_CSWGuiFade_SetTransitionState,
+        (LPVOID*)&g_originalCSWGuiFade_SetTransitionState) == MH_OK) {
+            if (MH_EnableHook(targetAddr_CSWGuiFade_SetTransitionState) == MH_OK) {
+                Log("CSWGuiFade_SetTransitionState hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+#endif
+
+#if HOOK_LOADING_SCREEN_FADE_UPDATE_FRAME_TIMING
+    void* targetAddr_LoadingScreenFadeUpdateFrame = (void*)(0x40dac0);
+    if (MH_CreateHook(targetAddr_LoadingScreenFadeUpdateFrame, &Hook_LoadingScreenFadeUpdateFrame,
+        (LPVOID*)&g_originalLoadingScreenFadeUpdateFrame) == MH_OK) {
+            if (MH_EnableHook(targetAddr_LoadingScreenFadeUpdateFrame) == MH_OK) {
+                Log("LoadingScreenFadeUpdateFrame hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+#endif
+
     void* targetAddr_ConfigParse = (void*)(0x4763b0);
     if (MH_CreateHook(targetAddr_ConfigParse, &Hook_ConfigParse, 
         (LPVOID*)&g_originalConfigParse) == MH_OK) {
@@ -2143,6 +2341,42 @@ void InstallHook() {
         (LPVOID*)&g_originalOpenOrStreamGameFile) == MH_OK) {
             if (MH_EnableHook(targetAddr_OpenOrStreamGameFile) == MH_OK) {
                 Log("OpenOrStreamGameFile hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_Texture_ApplyTXIAndBuildController = (void*)(0x424b10);
+    if (MH_CreateHook(targetAddr_Texture_ApplyTXIAndBuildController, &Hook_Texture_ApplyTXIAndBuildController,
+        (LPVOID*)&g_originalTexture_ApplyTXIAndBuildController) == MH_OK) {
+            if (MH_EnableHook(targetAddr_Texture_ApplyTXIAndBuildController) == MH_OK) {
+                Log("Texture_ApplyTXIAndBuildController hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_Texture_ApplyTXIBlendingMode = (void*)(0x45bf50);
+    if (MH_CreateHook(targetAddr_Texture_ApplyTXIBlendingMode, &Hook_Texture_ApplyTXIBlendingMode,
+        (LPVOID*)&g_originalTexture_ApplyTXIBlendingMode) == MH_OK) {
+            if (MH_EnableHook(targetAddr_Texture_ApplyTXIBlendingMode) == MH_OK) {
+                Log("Texture_ApplyTXIBlendingMode hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_Texture_ApplyTXIMaterialDirectives = (void*)(0x4da3f0);
+    if (MH_CreateHook(targetAddr_Texture_ApplyTXIMaterialDirectives, &Hook_Texture_ApplyTXIMaterialDirectives,
+        (LPVOID*)&g_originalTexture_ApplyTXIMaterialDirectives) == MH_OK) {
+            if (MH_EnableHook(targetAddr_Texture_ApplyTXIMaterialDirectives) == MH_OK) {
+                Log("Texture_ApplyTXIMaterialDirectives hook installed successfully");
             } else {
                 Log("Failed to enable hook");
             }

@@ -17,6 +17,7 @@
 #define HOOK_CSWGUIFADE_SET_TRANSITION_STATE_TIMING 0
 #define HOOK_LOADING_SCREEN_FADE_UPDATE_FRAME_TIMING 0
 #define HOOK_PARSE_TXI_AND_BUILD_TEXTURE_CONTROLLER_TIMING 1
+#define HOOK_TEXTURE_CACHE_TIMING 1
 
 // DirectInput8 proxy
 typedef HRESULT(WINAPI *DICREATE)(HINSTANCE, DWORD, REFIID, LPVOID*, LPUNKNOWN);
@@ -356,8 +357,80 @@ void __fastcall Hook_Texture_ApplyTXIAndBuildController(int* thisPtr, void* edxD
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    Log("Texture_ApplyTXIAndBuildController: " + std::to_string(duration.count()) + " Î¼s");
+    Log("Texture_ApplyTXIAndBuildController: " + std::to_string(duration.count()) + " μs");
 }
+
+#if HOOK_TEXTURE_CACHE_TIMING
+typedef int (__cdecl* Texture_FindExistingPtr_t)(char* primaryName, char* variantName, int variantArray, int variantCount);
+Texture_FindExistingPtr_t g_originalTexture_FindExisting = nullptr;
+
+int __cdecl Hook_Texture_FindExisting(char* primaryName, char* variantName, int variantArray, int variantCount) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    int result = g_originalTexture_FindExisting(primaryName, variantName, variantArray, variantCount);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("Texture_FindExisting: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef int (__cdecl* Texture_AcquireAndReleasePtr_t)(char* textureName, char* overrideName);
+Texture_AcquireAndReleasePtr_t g_originalTexture_AcquireAndRelease = nullptr;
+
+int __cdecl Hook_Texture_AcquireAndRelease(char* textureName, char* overrideName) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    int result = g_originalTexture_AcquireAndRelease(textureName, overrideName);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("Texture_AcquireAndRelease: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef int (__cdecl* Texture_GetOrCreatePtr_t)(char* textureName, int existingTexture, char* overrideName, int variantArray, int variantCount);
+Texture_GetOrCreatePtr_t g_originalTexture_GetOrCreate = nullptr;
+
+int __cdecl Hook_Texture_GetOrCreate(char* textureName, int existingTexture, char* overrideName, int variantArray, int variantCount) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    int result = g_originalTexture_GetOrCreate(textureName, existingTexture, overrideName, variantArray, variantCount);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("Texture_GetOrCreate: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef int (__cdecl* Texture_UpdateResourceBindingPtr_t)(int* textureRefObj, char* currentName, int param3, char* replacementName, int param5, int param6);
+Texture_UpdateResourceBindingPtr_t g_originalTexture_UpdateResourceBinding = nullptr;
+
+int __cdecl Hook_Texture_UpdateResourceBinding(int* textureRefObj, char* currentName, int param3, char* replacementName, int param5, int param6) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    int result = g_originalTexture_UpdateResourceBinding(textureRefObj, currentName, param3, replacementName, param5, param6);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("Texture_UpdateResourceBinding: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+
+typedef int (__cdecl* Texture_ReplaceAcrossUsersPtr_t)(int collectionA, int collectionB, char* newTextureName, char* oldTextureName);
+Texture_ReplaceAcrossUsersPtr_t g_originalTexture_ReplaceAcrossUsers = nullptr;
+
+int __cdecl Hook_Texture_ReplaceAcrossUsers(int collectionA, int collectionB, char* newTextureName, char* oldTextureName) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    int result = g_originalTexture_ReplaceAcrossUsers(collectionA, collectionB, newTextureName, oldTextureName);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("Texture_ReplaceAcrossUsers: " + std::to_string(duration.count()) + " μs");
+    return result;
+}
+#endif
 
 #if HOOK_PARSE_TXI_AND_BUILD_TEXTURE_CONTROLLER_TIMING
 typedef void (__thiscall* ParseTXIAndBuildTextureControllerPtr_t)(int* thisPtr, char* txiLine);
@@ -370,7 +443,7 @@ void __fastcall Hook_ParseTXIAndBuildTextureController(int* thisPtr, void* edxDu
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    Log("ParseTXIAndBuildTextureController: " + std::to_string(duration.count()) + " Î¼s");
+    Log("ParseTXIAndBuildTextureController: " + std::to_string(duration.count()) + " μs");
 }
 #endif
 
@@ -384,7 +457,7 @@ void __fastcall Hook_Texture_ApplyTXIBlendingMode(int* thisPtr, void* edxDummy, 
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    Log("Texture_ApplyTXIBlendingMode: " + std::to_string(duration.count()) + " Î¼s");
+    Log("Texture_ApplyTXIBlendingMode: " + std::to_string(duration.count()) + " μs");
 }
 
 typedef void (__thiscall* Texture_ApplyTXIMaterialDirectivesPtr_t)(int* thisPtr, uint32_t textureName);
@@ -944,6 +1017,19 @@ void* __fastcall Hook_gobconstructor(uint32_t* thisptr, void* edx,char* name){
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     Log("gobconstructor: " + std::to_string(duration.count()) + " μs");
     return result;
+}
+
+typedef void (__thiscall* Gob_LoadFromFileOrStreamPtr_t)(uint32_t* thisptr, uint32_t resourceName);
+Gob_LoadFromFileOrStreamPtr_t g_originalGob_LoadFromFileOrStream = nullptr;
+
+void __fastcall Hook_Gob_LoadFromFileOrStream(uint32_t* thisptr, void* edx, uint32_t resourceName){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalGob_LoadFromFileOrStream(thisptr, resourceName);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("Gob_LoadFromFileOrStream: " + std::to_string(duration.count()) + " μs");
 }
 
 typedef void* (__fastcall* AreaConstructorPtr_t)(uint32_t* thisptr, void* edx,uint32_t param2,uint32_t param3,int param4);
@@ -2279,6 +2365,18 @@ void InstallHook() {
             Log("Failed to create hook");
         }
 
+    void* targetAddr_Gob_LoadFromFileOrStream = (void*)(0x45a030);
+    if (MH_CreateHook(targetAddr_Gob_LoadFromFileOrStream, &Hook_Gob_LoadFromFileOrStream,
+        (LPVOID*)&g_originalGob_LoadFromFileOrStream) == MH_OK) {
+            if (MH_EnableHook(targetAddr_Gob_LoadFromFileOrStream) == MH_OK) {
+                Log("Gob_LoadFromFileOrStream hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
     void* targetAddr_AreaConstructor = (void*)(0x521360);
     if (MH_CreateHook(targetAddr_AreaConstructor, &Hook_AreaConstructor, 
         (LPVOID*)&g_originalAreaConstructor) == MH_OK) {
@@ -2375,6 +2473,68 @@ void InstallHook() {
         } else {
             Log("Failed to create hook");
         }
+
+#if HOOK_TEXTURE_CACHE_TIMING
+    void* targetAddr_Texture_FindExisting = (void*)(0x4269f0);
+    if (MH_CreateHook(targetAddr_Texture_FindExisting, &Hook_Texture_FindExisting,
+        (LPVOID*)&g_originalTexture_FindExisting) == MH_OK) {
+            if (MH_EnableHook(targetAddr_Texture_FindExisting) == MH_OK) {
+                Log("Texture_FindExisting hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_Texture_UpdateResourceBinding = (void*)(0x426d00);
+    if (MH_CreateHook(targetAddr_Texture_UpdateResourceBinding, &Hook_Texture_UpdateResourceBinding,
+        (LPVOID*)&g_originalTexture_UpdateResourceBinding) == MH_OK) {
+            if (MH_EnableHook(targetAddr_Texture_UpdateResourceBinding) == MH_OK) {
+                Log("Texture_UpdateResourceBinding hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_Texture_ReplaceAcrossUsers = (void*)(0x426f20);
+    if (MH_CreateHook(targetAddr_Texture_ReplaceAcrossUsers, &Hook_Texture_ReplaceAcrossUsers,
+        (LPVOID*)&g_originalTexture_ReplaceAcrossUsers) == MH_OK) {
+            if (MH_EnableHook(targetAddr_Texture_ReplaceAcrossUsers) == MH_OK) {
+                Log("Texture_ReplaceAcrossUsers hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_Texture_AcquireAndRelease = (void*)(0x4274e0);
+    if (MH_CreateHook(targetAddr_Texture_AcquireAndRelease, &Hook_Texture_AcquireAndRelease,
+        (LPVOID*)&g_originalTexture_AcquireAndRelease) == MH_OK) {
+            if (MH_EnableHook(targetAddr_Texture_AcquireAndRelease) == MH_OK) {
+                Log("Texture_AcquireAndRelease hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+
+    void* targetAddr_Texture_GetOrCreate = (void*)(0x427520);
+    if (MH_CreateHook(targetAddr_Texture_GetOrCreate, &Hook_Texture_GetOrCreate,
+        (LPVOID*)&g_originalTexture_GetOrCreate) == MH_OK) {
+            if (MH_EnableHook(targetAddr_Texture_GetOrCreate) == MH_OK) {
+                Log("Texture_GetOrCreate hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+#endif
 
 #if HOOK_PARSE_TXI_AND_BUILD_TEXTURE_CONTROLLER_TIMING
     void* targetAddr_ParseTXIAndBuildTextureController = (void*)(0x423ab0);

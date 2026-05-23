@@ -16,6 +16,7 @@
 #define HOOK_APPSTATE_SET_LOAD_BAR_VALUE_TIMING 0
 #define HOOK_CSWGUIFADE_SET_TRANSITION_STATE_TIMING 0
 #define HOOK_LOADING_SCREEN_FADE_UPDATE_FRAME_TIMING 0
+#define HOOK_PARSE_TXI_AND_BUILD_TEXTURE_CONTROLLER_TIMING 1
 
 // DirectInput8 proxy
 typedef HRESULT(WINAPI *DICREATE)(HINSTANCE, DWORD, REFIID, LPVOID*, LPUNKNOWN);
@@ -357,6 +358,21 @@ void __fastcall Hook_Texture_ApplyTXIAndBuildController(int* thisPtr, void* edxD
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     Log("Texture_ApplyTXIAndBuildController: " + std::to_string(duration.count()) + " Î¼s");
 }
+
+#if HOOK_PARSE_TXI_AND_BUILD_TEXTURE_CONTROLLER_TIMING
+typedef void (__thiscall* ParseTXIAndBuildTextureControllerPtr_t)(int* thisPtr, char* txiLine);
+ParseTXIAndBuildTextureControllerPtr_t g_originalParseTXIAndBuildTextureController = nullptr;
+
+void __fastcall Hook_ParseTXIAndBuildTextureController(int* thisPtr, void* edxDummy, char* txiLine) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    g_originalParseTXIAndBuildTextureController(thisPtr, txiLine);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    Log("ParseTXIAndBuildTextureController: " + std::to_string(duration.count()) + " Î¼s");
+}
+#endif
 
 typedef void (__thiscall* Texture_ApplyTXIBlendingModePtr_t)(int* thisPtr, uint32_t textureName, int materialState);
 Texture_ApplyTXIBlendingModePtr_t g_originalTexture_ApplyTXIBlendingMode = nullptr;
@@ -2359,6 +2375,20 @@ void InstallHook() {
         } else {
             Log("Failed to create hook");
         }
+
+#if HOOK_PARSE_TXI_AND_BUILD_TEXTURE_CONTROLLER_TIMING
+    void* targetAddr_ParseTXIAndBuildTextureController = (void*)(0x423ab0);
+    if (MH_CreateHook(targetAddr_ParseTXIAndBuildTextureController, &Hook_ParseTXIAndBuildTextureController,
+        (LPVOID*)&g_originalParseTXIAndBuildTextureController) == MH_OK) {
+            if (MH_EnableHook(targetAddr_ParseTXIAndBuildTextureController) == MH_OK) {
+                Log("ParseTXIAndBuildTextureController hook installed successfully");
+            } else {
+                Log("Failed to enable hook");
+            }
+        } else {
+            Log("Failed to create hook");
+        }
+#endif
 
     void* targetAddr_Texture_ApplyTXIBlendingMode = (void*)(0x45bf50);
     if (MH_CreateHook(targetAddr_Texture_ApplyTXIBlendingMode, &Hook_Texture_ApplyTXIBlendingMode,

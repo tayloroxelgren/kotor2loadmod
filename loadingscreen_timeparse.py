@@ -87,6 +87,7 @@ def main():
         "CSWGuiTutorialBox_Ctor",
         "OpenOrStreamGameFile",
         "Texture_ApplyTXIAndBuildController",
+        "ParseTXIAndBuildTextureController",
         "Texture_ApplyTXIBlendingMode",
         "Texture_ApplyTXIMaterialDirectives",
         "CSWGuiBarkBubble_Ctor",

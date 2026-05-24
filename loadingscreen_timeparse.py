@@ -43,6 +43,7 @@ def main():
     logfile = sys.argv[1]
 
     patterns = [
+        "LoadSession",
         "loadingscreen",
         "LoadAndInitialize",
         "ProcessResourceQueue",
@@ -58,6 +59,11 @@ def main():
         "ModuleHandler",
         "ModuleChunkLoadCore",
         "LoadingScreenUpdateFrame",
+        "SwapBuffers",
+        "GUIContext_UpdateAndRender",
+        "WindowsMessagePump",
+        "OpenGL_GammaPostProcess",
+        "FrameMetricsAndMemoryUpdate",
         "AppState_GetGuiContext",
         "AppState_GetLoadProgressByte",
         "Runtime_FloatToInt_ST0",
@@ -128,6 +134,9 @@ def main():
         "GFF_ReadIntFieldByName",
         "GFF_ReadVector3FieldByName",
         "GFF_LookupFieldLabelByName",
+        "ResourceStreamer_Init",
+        "ResourceLoader",
+        "Worker_ProcessJob",
         "ResourceEnsureLoaded",
         "ResourceLoadFromArchiveSlot",
         "ResourceLoadMemoryBacked",

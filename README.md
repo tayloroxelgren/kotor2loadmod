@@ -19,6 +19,11 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 |`FUN_00533830`| **LoadingScreen** | This appears to be the main function that initiates the loading screens in the game | yes |
 |`FUN_0051c470` | **LoadingScreenWrapper** | Seems to just be a wrapper to call LoadingScreen | yes |
 |`FUN_00409ed0` | **LoadingScreenUpdateFrame** | Draws and presents one loading-screen frame, then advances asset streaming by ticking the resource queue. | yes |
+|`gdi32!SwapBuffers` | **SwapBuffers** | Presents the OpenGL back buffer for the game window. During loading this can expose driver/vsync/frame pacing cost that does not show up as game-side CPU work. | yes |
+|`FUN_004113a0` | **GUIContext_UpdateAndRender** | Walks the active GUI context, updates visible controls, draws loading/UI layers, handles queued GUI cleanup, and performs final per-frame GUI work. | yes |
+|`FUN_004094f0` | **WindowsMessagePump** | Pumps pending Win32 messages with PeekMessage/GetMessage, TranslateMessage, and DispatchMessage so the game window stays responsive during loading. | yes |
+|`FUN_00436b90` | **OpenGL_GammaPostProcess** | Applies the optional framebuffer copy/gamma post-process path before presenting, including texture copy/update and fullscreen draw work when the gamma state changes. | yes |
+|`FUN_00478a20` | **FrameMetricsAndMemoryUpdate** | Updates frame/display state, samples available physical memory, and runs lightweight per-frame resource/texture housekeeping before rendering. | yes |
 |`FUN_005582f0`| **LoadAndInitialize** | This function likely handles the loading and initialization of mod resources and game scenario data, including mod information, game parameters (time, player data), and setting up various in-game scripts. | yes |
 |`FUN_00407920`| **GameMain** | Most likely the main function of the game | no |
 |`FUN_00781be0` | **Engine** | Seems to have the main engine logic | no |
@@ -112,7 +117,7 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 |`FUN_0087a350` | **SendMessageWithPHeader** | Sends a compact, 3-byte network message with a header of 0x70 and two variable parameters. | no |
 |`FUN_00883560` | **InitializeAndSyncState** | A major function that performs a series of game state updates, logs a formatted message, and sends it over the network. It also calls FUN_007045b0 to send a specific message and interacts with a resource scheduler to manage concurrent tasks. | no |
 |`FUN_008faca0` | **ModuleLoadSynchronization** | A critical state-change function, similar to FUN_00883560, that synchronizes game data. It updates multiple game variables, logs a formatted message, sends it over the network, and interacts with the resource scheduler to manage assets and tasks. | no |
-|`FUN_00711360` | **ResourceStreamer_Init** | This function initializes the resource streaming system. It determines available physical memory to size streaming buffers and launches a dedicated worker thread to handle the loading of game assets from storage into memory. | no |
+|`FUN_00711360` | **ResourceStreamer_Init** | This function initializes the resource streaming system. It determines available physical memory to size streaming buffers and launches a dedicated worker thread to handle the loading of game assets from storage into memory. | yes |
 |`FUN_005363a0` | **SubsystemManager_Init** | This function is a core initializer that sets up the game's key subsystems. It allocates memory and constructs various manager objects, including those for a message queue, resource queues, and an in-game virtual machine for scripts. It also establishes file paths for different game directories and logs each step of the initialization process for debugging. | no |
 |`FUN_00788d90` | **GameClient_Init** | This function performs the comprehensive setup for the game's client-side environment. It reads settings from the swkotor2.ini file to configure graphics options like "FullScreen" and "Texture Quality." It also initializes core game objects, loads localization data, and sets up various other subsystems needed to run the game, such as the resource streamer and other game-specific managers. | no |
 |`FUN_0073fad0` | **GameClient_Init_Wrapper** | Wrapper function for GameClient_Init | no |
@@ -136,7 +141,7 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 |`FUN_00737540` | **ModuleDirectoryScanner** | Walks through the file system and for each file in a directory does something | yes |
 |`FUN_006310d0` | **LoadGame** | Loads a save game | no |
 |`FUN_005308b0` | **GameSaveLoadManager** | Central save/load system dispatcher for the game. It uses a single-byte parameter to determine which action to perform | no |
-|`FUN_00711750` | **ResourceLoader** | Main function that loads resources | no |
+|`FUN_00711750` | **ResourceLoader** | Main function that loads resources | yes |
 |`FUN_00711690` | **ResourceLoaderWrapper** | Wrapper for resource loader | no |
 |`FUN_00711c20` | **ResourceEnsureLoaded** | Ensures a resource entry has resident data. If the entry is not loaded, dispatches to the correct backend based on the high bits of the packed resource id, handles async completion waits/finalization, bumps the resource refcount, and returns the loaded data pointer. | yes |
 |`FUN_00713fb0` | **ResourceLoadFromArchiveSlot** | Loads a resource from an indexed archive/resource-manager slot. Allocates a destination buffer, asks the archive vtable for size/read operations, and marks the resource loaded when the read and parse callback succeed. | yes |
@@ -210,7 +215,7 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 |`FUN_007ca230` | **CSWGuiInGamePanel_NextTab** | Advances the active tab index by 1, wrapping from 7 back to 0, then switches via `CSWGuiInGamePanel_LazyInitTab`. | no |
 |`FUN_007ca3c0` | **CSWGuiInGamePanel_PrevTab** | Decrements the active tab index by 1, wrapping from 0 back to 7, then switches via `CSWGuiInGamePanel_LazyInitTab`. | no |
 |`FUN_00411170` | **UpdateObjectCollectionsAndTrace** | Iterates through collections of objects, updates their state, and logs the process | no |
-|`FUN_00715c00` | **Worker_ProcessJob** | Main worker-side job processor that runs after the thread is resumed, likely consuming the shared job fields and performing the actual resource lookup/loading work before the worker goes idle again. | no |
+|`FUN_00715c00` | **Worker_ProcessJob** | Main worker-side job processor that runs after the thread is resumed, likely consuming the shared job fields and performing the actual resource lookup/loading work before the worker goes idle again. | yes |
 |`FUN_00711600` | **Worker_SubmitJob** | Waits for the worker slot to become free, writes job parameters into the shared worker state, marks the worker busy, and wakes the suspended worker thread. | no |
 |`FUN_0069cdb0` | **CExoStats::SerializeCombatInfo** | A GFF serialization function that packs a character's live combat statistics—including attack/damage modifiers, critical hit ranges, and equipped items—into a structured "CombatInfo" field for saving to a file or syncing over the network. | no |
 |`FUN_00638bd0` | **GameSaveLoad_Core** | The central dispatcher for the save/load state machine. It coordinates high-level transitions (New Game, Save, or Area Load) by driving the mass-serialization of Gob objects via CExoStats routines. Once data is gathered, it hands the resulting GFF packets to the streaming system via Worker_SubmitJob to be written to disk. | no |
@@ -367,6 +372,301 @@ Current hypothesis: the best optimization target is probably still not one GUI c
 - destination allocation: `Resource_AllocateLoadBuffer`
 - data transfer: `*_ReadResourceSync` / `*_ReadResourceAsync`
 - close/release wrappers: `*_ReleaseSyncClose` / `*_ReleaseAsyncClose`
+
+#### ResourceLoadFromArchive — detailed breakdown
+
+`ResourceLoadFromArchive` (`FUN_00713bf0`) is one of four backends dispatched by `ResourceEnsureLoaded` based on the top 2 bits of the packed resource ID. It handles ERF, MOD, and HAK encapsulated archives (module data, override content, community hak packs). Its sibling `ResourceLoadFromArchiveSlot` (`FUN_00713fb0`) handles BIF/KEY archives (the main game data store indexed by `chitin.key`) using a slot-index embedded in the resource ID instead of a list walk.
+
+##### How it fits in the resource manager hierarchy
+
+```
+ResourceEnsureLoaded (dispatches on top 2 bits of resource ID)
+  ├─ case 0: ResourceLoadFromArchiveSlot  → BIF/KEY archives
+  ├─ case 1: ResourceLoadMemoryBacked     → data already resident in RAM
+  ├─ case 2: ResourceLoadFromArchive      → ERF/MOD/HAK archives   ← this function
+  └─ case 3: ResourceLoadFromLooseFile    → individual loose files on disk
+```
+
+##### Per-call execution sequence
+
+For every single resource requested from an ERF/MOD/HAK archive, `ResourceLoadFromArchive` does the following in sequence:
+
+1. **List walk** — iterates a linked list of loaded resource-manager nodes to find the one whose archive ID matches the high bits of the resource ID. Each node holds a vtable pointer to the concrete archive reader object.
+2. **`ArchiveReaderShared_AddRefSyncOpen`** — increments a reference count on the archive reader. If the count was zero, calls `CExoEncapsulatedFile_OpenSyncHandle`.
+3. **`CExoEncapsulatedFile_OpenSyncHandle`** — opens the archive file on disk, reads the full ERF/MOD/HAK header, and parses the entire resource table into memory. Dispatches to `CExoFile_OpenByResourceType` which selects the correct file type constant (ERF=`0x7DB`, MOD=`0x809`, HAK=`0x270D`, etc.).
+4. **`CExoEncapsulatedFile_GetResourceSize`** — looks up the byte size of this specific resource in the already-parsed table.
+5. **`Resource_AllocateLoadBuffer`** — allocates the destination buffer. May purge other loaded resources if memory is tight.
+6. **`CExoEncapsulatedFile_ReadResourceSync`** — seeks to the resource's offset within the archive and reads its bytes into the buffer.
+7. **`CExoEncapsulatedFile_ReleaseSyncClose`** — decrements the reference count. If it drops to 1, closes the file handle.
+8. **Resource parse callback** — invokes the type-specific parser (e.g. GFF loader, texture decoder) on the raw bytes.
+
+##### The reference-count problem
+
+Steps 2 and 7 use a reference-counting scheme intended to allow multiple concurrent readers to share one open file handle. In practice, because all resource loads are synchronous and single-threaded, the reference count cycles **0 → 1 → 0** for every single resource. This means the archive file is **opened and closed once per resource**, not once per loading session.
+
+From the latest timing run (1147 calls total):
+
+| Step | Function | Time | Calls |
+|------|----------|------|-------|
+| Open + parse header | `CExoEncapsulatedFile_OpenSyncHandle` | **115ms** | 911 |
+| Open wrapper | `ArchiveReaderShared_AddRefSyncOpen` | **127ms** | 932 |
+| Actual data read | `CExoEncapsulatedFile_ReadResourceSync` | 43ms | 911 |
+| Release/close | `CExoEncapsulatedFile_ReleaseSyncClose` | 12ms | 917 |
+
+Open/close overhead accounts for roughly **90% of the function's total cost**. The actual data transfer is only ~15%.
+
+##### Async path exists but is unused
+
+`ResourceLoadFromArchive` has a complete async branch (`param_2 != 0`) that calls async vtable slots (`AddRefAsyncOpen`, `ReadResourceAsync`) and stores a completion handle at `param_1_00 + 0x2c` for later finalization via `ResourceFinalizeAsyncLoad`. This path is never triggered: `ResourceFinalizeAsyncLoad` has zero calls in every measured run, meaning `ResourceEnsureLoaded` always passes `param_2 = 0`. All archive loads block the main thread.
+
+##### Improvement potential
+
+| Approach | Estimated saving |
+|----------|-----------------|
+| Keep archive handles open for the full load phase | ~225ms (~90% of current cost) |
+| Additionally sort reads by file offset (sequential I/O) | marginal further gain |
+| Pre-load small archives entirely into RAM (as `CExoResourceImageFile` already does for RIM files) | eliminates all seek/read cost for that archive |
+
+A straightforward fix — holding archive handles open across the duration of a load sequence rather than opening and closing per resource — could reduce `ResourceLoadFromArchive` from ~281ms to ~55ms, approximately a **5× speedup** on this function. As a share of total observed load time (~3410ms) this represents roughly **7% of the full loading screen duration**.
+
+The BIF/KEY path (`ResourceLoadFromArchiveSlot`) shows the target state: `CExoResFile_AddRefSyncOpen` costs essentially 0ms across 2255 calls, suggesting the BIF reader either keeps handles open or benefits from OS file-cache hits due to the smaller number of distinct archive files involved.
+
+##### In plain terms
+
+The game stores many of its files packed inside a few large archive files (`.erf`, `.mod`, `.hak`). Every time the game needs one item from an archive during loading, it:
+
+1. Opens the archive file
+2. Reads a table at the start to find where the item is
+3. Jumps to that position and reads the item
+4. Closes the archive file
+
+Then for the next item — even if it is in the **same archive** — it repeats the whole process: open, read table, read item, close. This happens roughly 911 times per load. Almost all of that time is spent on steps 1 and 4 (opening and closing), not on actually reading the game data.
+
+The fix is straightforward in concept: open the archive once at the start of loading, read everything needed from it, then close it. This is similar to how you would not open and close a book for every sentence you want to read — you open it once, read what you need, then close it.
+
+#### ResourceStreamer_Init — background worker thread architecture
+
+`ResourceStreamer_Init` (`FUN_00711360`) is the constructor for the game's dedicated background loading thread. It is one of two parallel loading paths in the engine. The other — the synchronous main-thread path documented above — handles per-frame resource loads during gameplay and area transitions. This worker handles bulk module/RIM/save-file loading at major load points (game start, save load, module change).
+
+##### Initialization sequence
+
+```
+ResourceStreamer_Init(streamerObj)
+  ├─ ResetTracer / FUN_00722dd0           ; init tracer instrumentation
+  ├─ GlobalMemoryStatus(&local_34)        ; query system physical memory
+  ├─ Size streaming buffers:
+  │     if (totalPhys / 2 < 16MB):
+  │         buffer[1] = buffer[2] = 16MB        ; floor of 16MB each
+  │     else:
+  │         buffer[1] = buffer[2] = totalPhys/2 ; up to half of RAM each
+  ├─ Zero out worker state fields
+  └─ CreateThread(
+        stackSize  = 0x10000,                ; 64 KB worker stack
+        entry      = lpStartAddress_007112f0,
+        creationFlags = 4,                   ; CREATE_SUSPENDED
+        threadIdOut   = streamerObj + 0x3c
+     ) → store HANDLE at streamerObj + 0x38
+```
+
+The thread is created **suspended**. It does no work until something explicitly calls `ResumeThread()` on it.
+
+##### Worker object layout (relative to streamer object pointer)
+
+| Offset | Field | Meaning |
+|---|---|---|
+| `+0x00` | totalPhys | `GlobalMemoryStatus.dwTotalPhys` snapshot |
+| `+0x04` | buffer1Size | Streaming buffer 1 byte size |
+| `+0x08` | buffer2Size | Streaming buffer 2 byte size |
+| `+0x28` | bufferRef1 | Cleared at init; allocated later on demand |
+| `+0x30` | bufferRef2 | Cleared at init |
+| `+0x34` | enableFlag | Zeroed at init |
+| `+0x38` | HANDLE | Worker thread handle |
+| `+0x3c` | threadId | Worker thread ID |
+| `+0x44` | **status byte** | `1` = busy, `2/3` = success variants, `4` = failure |
+| `+0x48` | **stop flag** | Worker loop exits when nonzero |
+| `+0x4c` | jobParamA | Job parameter buffer (filename/path data) |
+| `+0x54` | jobParam2 | Per-job classifier flag |
+| `+0x58` | jobParam3 | Per-job classifier flag |
+| `+0x5c` | **result flags** | OR-mask of which datasets were loaded (bits `0x01/0x02/0x04/0x08/0x10/0x20`) |
+
+##### Thread lifecycle
+
+The thread entry point (`lpStartAddress_007112f0`):
+
+```c
+void lpStartAddress_007112f0(void) {
+    while (DAT_00a1b490 != 0 && *(int*)(DAT_00a1b490 + 0x48) == 0) {
+        Worker_ProcessJob();              // runs once
+        SuspendThread(self);              // self-suspend until next ResumeThread
+    }
+    ExitThread(1);
+}
+```
+
+The worker uses a **suspend/resume** pattern rather than a condition variable or semaphore:
+
+1. Thread runs `Worker_ProcessJob` exactly once
+2. Thread suspends itself
+3. Stays suspended until `ResumeThread` is called externally
+4. Repeats from step 1
+5. Exits when stop flag at `+0x48` is set
+
+##### Job submission protocol — `Worker_SubmitJob`
+
+```c
+void Worker_SubmitJob(streamerObj, param1, param2, param3) {
+    do { } while (*(char*)(streamerObj + 0x44) == '\x01');  // busy-wait until idle
+    // write job parameters
+    FUN_007337c0(param1);                                    // copy filename/path
+    *(uint32_t*)(streamerObj + 0x54) = param2;
+    *(uint32_t*)(streamerObj + 0x58) = param3;
+    *(char*)(streamerObj + 0x44) = 1;                        // mark busy
+    *(char*)(streamerObj + 0x5c) = 0;                        // clear result flags
+    ResumeThread(*(HANDLE*)(streamerObj + 0x38));            // wake worker
+}
+```
+
+Submission is **fire-and-forget at the API level** — `Worker_SubmitJob` returns immediately after waking the worker. Synchronization is the caller's responsibility.
+
+##### Caller-side wait pattern — `FUN_0055fa90`
+
+`Worker_SubmitJob` has exactly one caller. That caller (`FUN_0055fa90`) does wait, using a `Sleep(10)` polling loop that also services the loading screen:
+
+```c
+Worker_SubmitJob(jobParams);
+status = *(char*)(streamerObj + 0x44);
+while (status == '\x01') {
+    Sleep(10);
+    if (loadBarValue < target) {
+        counter++;
+        if (counter > 100) {                // ~1 second of waiting
+            loadBarValue += step;
+            AppState_SetLoadBarValue();
+            LoadingScreenUpdateFrame(...);  // tick UI so screen does not freeze
+            counter = 0;
+        }
+    }
+    status = *(char*)(streamerObj + 0x44);
+}
+```
+
+So while the worker thread does file I/O on its own thread, the main thread sleeps in 10ms increments and advances the load bar every ~1 second of waiting. The UI stays responsive, but the main thread is otherwise blocked on the worker.
+
+##### Worker_ProcessJob — what it actually loads
+
+Inside `Worker_ProcessJob`, the worker switches based on whether `jobParam2` is set. Three resource buckets are loaded by issuing `ResourceLoader` / `ResourceLoaderWrapper` calls, each tagged with a category prefix used by the tracer:
+
+| Bucket | Tracer prefix | Source |
+|---|---|---|
+| Base RIM index | `RIMS:` | Always loaded first |
+| Per-area RIM | `RIMS:<area>` or `LIVE%d:RIMSXBOX\\` | Loaded when an area context exists |
+| Module data | `MODULES:` and `MODULES:<module>` | Walks every module entry returned by `FUN_00407800`, loads each `\modules\<name>` |
+| Module `_dlg` overlays | implicit `_dlg` suffix | For each module, also loads `<name>_dlg` |
+| Save game payload | `CURRENTGAME:` | When `jobParam3 != 0` or RIM path failed |
+
+After all loads complete, the worker writes a result code to its status byte:
+
+- `2` — full success including a populated `local_28` path (RIM-only fast path)
+- `3` — full success
+- `4` — failure
+
+The bits in `+0x5c` then tell the caller exactly which datasets are now resident:
+
+| Bit | Meaning |
+|---|---|
+| `0x01` | CURRENTGAME chunk loaded |
+| `0x02` | Modules loaded (fallback path) |
+| `0x04` | CURRENTGAME loaded (alt path) |
+| `0x08` | Modules loaded (`0x270d` MOD-type path) |
+| `0x10` | RIMS loaded |
+| `0x20` | RIMS loaded (alt path) |
+
+##### When this thread actually runs
+
+`Worker_SubmitJob`'s only caller (`FUN_0055fa90`) is itself invoked from two startup paths:
+
+- `GameClient_Init` (`FUN_00788d90`) — initial client setup
+- `SubsystemManager_Init` (`FUN_005363a0`) — engine subsystem boot
+
+So in practice, the worker thread is primarily used **at game startup and at module boundaries**, not for every per-frame resource load and not for every save reload of the same module. During a "load the same save N times" benchmark, the worker may already be suspended after its first run and not contribute to subsequent wall-clock measurements.
+
+##### How the two loading paths work together
+
+The engine has two parallel loading pipelines that share the same on-disk resources but operate very differently:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                          MAIN THREAD                                │
+│                                                                     │
+│  loadingscreen ─► ProcessResourceQueue ─► ResourceQueue_UnpackAndTr │
+│                       (ring buffer drain)                           │
+│                                                                     │
+│  PpacketHandler ─► ModuleHandler ─► ModuleChunkLoadCore             │
+│                                          │                          │
+│                                          ▼                          │
+│                                 ResourceEnsureLoaded                │
+│                                  ├─ Archive (ERF/MOD/HAK)           │
+│                                  ├─ ArchiveSlot (BIF/KEY)           │
+│                                  ├─ MemoryBacked                    │
+│                                  └─ LooseFile                       │
+│                                                                     │
+│                                 GUI constructors run inline         │
+│                                  (CSWGuiInGame*, InitializeGameUI)  │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+                            ▲       │
+            ResumeThread() ─┘       │ Sleep(10) poll on status byte
+                                    │ + LoadingScreenUpdateFrame tick
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                     WORKER (BACKGROUND) THREAD                      │
+│                                                                     │
+│  lpStartAddress_007112f0:                                           │
+│      loop:                                                          │
+│          Worker_ProcessJob:                                         │
+│              ResourceLoader("RIMS:")                                │
+│              ResourceLoader("MODULES:<...>")                        │
+│              ResourceLoader("CURRENTGAME:")                         │
+│              ... full-bucket file scans and loads ...               │
+│              status = 2 / 3 / 4                                     │
+│          SuspendThread(self)                                        │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+Division of labor:
+
+| Path | Triggered by | Does | Blocks main thread? |
+|---|---|---|---|
+| Main-thread synchronous | `loadingscreen` per frame, packets in ring buffer | Per-resource archive lookups, GUI constructor work, area initialization | Yes — the main thread is the one doing the work |
+| Background worker | `FUN_0055fa90` at module/startup boundaries | Bulk RIM/module/save load via category-tagged `ResourceLoader` calls | Yes, indirectly — caller `Sleep(10)`s until worker reports done |
+
+The two paths do not race for the same resources. They divide the work by **scope**:
+
+- Worker thread: "load this whole bucket once" — RIM indexes, complete module asset lists, save game payload.
+- Main thread: "fetch this specific resource right now" — individual GFFs, textures, scripts hit on demand during scene construction.
+
+When `FUN_0055fa90` runs (e.g. boot or full module change), the main thread submits a job, then enters its `Sleep(10)` poll loop. During that poll the loading screen is ticked but no resource queue draining happens on the main thread itself. The worker is the critical path during this window.
+
+After the worker reports done, control returns to the normal main-thread loop. `ModuleChunkLoadCore` and `ProcessResourceQueue` then run their per-resource synchronous path to wire up GUI panels and reactive scene state — this is the part visible in our `KEEP_ARCHIVE_OPEN_DURING_LOAD` measurements.
+
+##### Why main-thread optimizations may not move LoadSession
+
+Because the worker performs full-bucket loads at startup/module-change, anything the main thread does during a same-save reload is gated by what is *already resident* from the last worker run. Optimizing the main-thread archive path can reduce `ResourceLoadFromArchive` total time, but if that work was already a small share of the wall-clock window (because the worker did the heavy lifting earlier), the LoadSession metric will be dominated by something else — typically the synchronous GUI construction + area object wiring inside `ModuleChunkLoadCore`. That phase is itself bounded by sequencing requirements (each constructor reads its own GFF layout), not by I/O speed.
+
+This is why stubbing one GUI constructor does not shrink LoadSession: the time it was attributed to was inclusive of nested resource lookups that simply get re-attributed to whichever constructor runs next.
+
+##### In plain terms
+
+Think of the engine as a restaurant kitchen with two cooks:
+
+- **The prep cook (worker thread)** runs at the start of each shift. Given a list of menus (modules, RIMs, the active save), they go to the pantry, pull every ingredient those menus need, and stage them on the counter. They do this once per shift change. While the prep cook is working, the **head chef (main thread)** sits at the pass with a timer, peeking every 10 ms to see if the prep cook is done, and ringing a "still working" bell every second so the dining room knows the kitchen is alive.
+
+- **The head chef (main thread)** then assembles individual dishes as orders come in. They grab ingredients from the counter (resources already resident), occasionally walking back to the pantry themselves for one-off items (per-frame archive loads). They also plate the dishes — wiring up GUI panels, building area state — and this plating work has to happen in a specific order because each dish builds on the last.
+
+When you reload the same save without changing modules, the prep cook does not run again — everything they staged earlier is still on the counter. Only the head chef works, and they are mostly plating, not fetching. So speeding up the pantry trips (archive open/close) helps the head chef, but it does not change how long the plating takes, because plating is sequential by recipe rather than I/O-bound.
+
+The total order time you measure (`LoadSession`) is the length of the slower of the two activities. If plating is the limiter on reload, faster pantry trips will not be visible in the total. To move the number, you have to either speed up the plating itself (rework GUI constructors), let dishes be plated in parallel (turn synchronous constructors async), or pre-plate during the prep cook's shift (move work out of the per-load window entirely).
 
 ## Build Instructions
 Download [MinHook](https://github.com/TsudaKageyu/minhook)

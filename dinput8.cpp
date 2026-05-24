@@ -2,22 +2,24 @@
 #include <fstream>
 #include <string>
 #include <chrono>
+#include <vector>
 #include "minhook/include/MinHook.h"
 #include <Windows.h>
 
 #define LOGGING_ENABLED 1
 #define LOG_LOADSCREEN_ONLY 0
 #define SKIP_PRELOAD_INITIAL_ASSETS_WRAPPER 1
-#define SKIP_LOADING_SCREEN_UPDATE_FRAME_IN_MODULE_CHUNK_LOAD_CORE 0
+#define SKIP_LOADING_SCREEN_UPDATE_FRAME_IN_MODULE_CHUNK_LOAD_CORE 1
 #define HOOK_GUI_DEEP_GFF_TIMING 0
 #define HOOK_APPSTATE_GET_GUI_CONTEXT_TIMING 0
 #define HOOK_APPSTATE_GET_LOAD_PROGRESS_BYTE_TIMING 0
 #define HOOK_RUNTIME_FLOAT_TO_INT_ST0_TIMING 0
 #define HOOK_APPSTATE_SET_LOAD_BAR_VALUE_TIMING 0
-#define HOOK_CSWGUIFADE_SET_TRANSITION_STATE_TIMING 0
+#define HOOK_CSWGUIFADE_SET_TRANSITION_STATE_TIMING 1
 #define HOOK_LOADING_SCREEN_FADE_UPDATE_FRAME_TIMING 0
-#define HOOK_PARSE_TXI_AND_BUILD_TEXTURE_CONTROLLER_TIMING 1
-#define HOOK_TEXTURE_CACHE_TIMING 1
+#define HOOK_PARSE_TXI_AND_BUILD_TEXTURE_CONTROLLER_TIMING 0
+#define HOOK_TEXTURE_CACHE_TIMING 0
+#define KEEP_ARCHIVE_OPEN_DURING_LOAD 1
 
 // DirectInput8 proxy
 typedef HRESULT(WINAPI *DICREATE)(HINSTANCE, DWORD, REFIID, LPVOID*, LPUNKNOWN);
@@ -71,16 +73,14 @@ loadingscreenPtr_t g_originalLoadingScreenPtr = nullptr;
 
 int __fastcall Hook_loadingscreenPtr(int param1) {
     auto start = std::chrono::high_resolution_clock::now();
-    
+
 
     int result = g_originalLoadingScreenPtr(param1);
-    
+
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    
-    // Log with more detail
     Log("loadingscreen: " + std::to_string(duration.count()) + " μs");
-    
+
     return result;
 }
 
@@ -325,6 +325,14 @@ uint32_t __cdecl Hook_GameObjUpdate(byte param1){
 
 thread_local int g_moduleChunkLoadCoreDepth = 0;
 
+#if KEEP_ARCHIVE_OPEN_DURING_LOAD
+static bool g_archiveLoadInProgress = false;
+static std::vector<int*> g_pinnedEncapsulatedArchives;
+// Forward declaration — defined later with the rest of the archive hooks.
+typedef void (__thiscall* CExoEncapsulatedFile_ReleaseSyncClosePtr_t)(int* thisPtr);
+extern CExoEncapsulatedFile_ReleaseSyncClosePtr_t g_originalCExoEncapsulatedFile_ReleaseSyncClose;
+#endif
+
 // Game's own _free (0x0091c6b5), matched to the _malloc inside AllocateMemoryOrThrow.
 // Used to release pre-allocated blocks that we skip constructing, avoiding heap leaks.
 // Must use the game's CRT free — calling our DLL's free on game-malloc'd memory corrupts the heap.
@@ -338,8 +346,22 @@ uint32_t __fastcall Hook_ModuleChunkLoadCore(int param1, void* edx) {
     auto start = std::chrono::high_resolution_clock::now();
 
     g_moduleChunkLoadCoreDepth++;
+#if KEEP_ARCHIVE_OPEN_DURING_LOAD
+    g_archiveLoadInProgress = true;
+#endif
+
     uint32_t result = g_originalModuleChunkLoadCore(param1);
+
     g_moduleChunkLoadCoreDepth--;
+#if KEEP_ARCHIVE_OPEN_DURING_LOAD
+    g_archiveLoadInProgress = false;
+    // Close all archives that were kept open during loading.
+    // Each was left with refcount==1; calling the original close drops it to 0 and closes the file.
+    for (int* archivePtr : g_pinnedEncapsulatedArchives) {
+        g_originalCExoEncapsulatedFile_ReleaseSyncClose(archivePtr);
+    }
+    g_pinnedEncapsulatedArchives.clear();
+#endif
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -793,11 +815,13 @@ typedef uint32_t* (__fastcall* CSWGuiInGameAbilities_CtorPtr_t)(void* thisPtr, v
 CSWGuiInGameAbilities_CtorPtr_t g_originalCSWGuiInGameAbilities_Ctor = nullptr;
 uint32_t* __fastcall Hook_CSWGuiInGameAbilities_Ctor(void* thisPtr, void* edx, uint32_t param1){
     auto start = std::chrono::high_resolution_clock::now();
-    uint32_t* result = g_originalCSWGuiInGameAbilities_Ctor(thisPtr,edx,param1);
+    // uint32_t* result = g_originalCSWGuiInGameAbilities_Ctor(thisPtr,edx,param1);
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    Log("CSWGuiInGameAbilities_Ctor: " + std::to_string(duration.count()) + " μs");
-    return result;
+    // Log("CSWGuiInGameAbilities_Ctor: " + std::to_string(duration.count()) + " μs");
+    Log("CSWGuiInGameAbilities_Ctor: Not active!");
+    // return result;
+    return 0;
 }
 
 typedef uint32_t* (__fastcall* CSWGuiInGameJournal_CtorPtr_t)(void* thisPtr, void* edx, uint32_t param1);
@@ -878,7 +902,7 @@ uint32_t __fastcall Hook_AppState_GetGuiContext(void* thisPtr, void* edx){
     uint32_t result = g_originalAppState_GetGuiContext(thisPtr, edx);
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    Log("AppState_GetGuiContext: " + std::to_string(duration.count()) + " Î¼s");
+    Log("AppState_GetGuiContext: " + std::to_string(duration.count()) + " μs");
     return result;
 }
 
@@ -890,7 +914,7 @@ unsigned char __fastcall Hook_AppState_GetLoadProgressByte(void* thisPtr, void* 
     unsigned char result = g_originalAppState_GetLoadProgressByte(thisPtr, edx, index);
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    Log("AppState_GetLoadProgressByte: " + std::to_string(duration.count()) + " Î¼s");
+    Log("AppState_GetLoadProgressByte: " + std::to_string(duration.count()) + " μs");
     return result;
 }
 
@@ -902,7 +926,7 @@ int __cdecl Hook_Runtime_FloatToInt_ST0(){
     int result = g_originalRuntime_FloatToInt_ST0();
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    Log("Runtime_FloatToInt_ST0: " + std::to_string(duration.count()) + " Î¼s");
+    Log("Runtime_FloatToInt_ST0: " + std::to_string(duration.count()) + " μs");
     return result;
 }
 
@@ -914,7 +938,7 @@ void __fastcall Hook_AppState_SetLoadBarValue(void* thisPtr, void* edx, int valu
     g_originalAppState_SetLoadBarValue(thisPtr, edx, value, updateFlag);
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    Log("AppState_SetLoadBarValue: " + std::to_string(duration.count()) + " Î¼s");
+    Log("AppState_SetLoadBarValue: " + std::to_string(duration.count()) + " μs");
 }
 
 typedef void (__fastcall* CSWGuiFade_SetTransitionStatePtr_t)(void* thisPtr, void* edx, int mode, uint32_t progress, uint32_t duration, uint32_t* targetColor);
@@ -925,7 +949,6 @@ void __fastcall Hook_CSWGuiFade_SetTransitionState(void* thisPtr, void* edx, int
     g_originalCSWGuiFade_SetTransitionState(thisPtr, edx, mode, progress, duration, targetColor);
     auto end = std::chrono::high_resolution_clock::now();
     auto durationTime = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    Log("CSWGuiFade_SetTransitionState: " + std::to_string(durationTime.count()) + " Î¼s");
 }
 
 typedef void (__fastcall* LoadingScreenFadeUpdateFramePtr_t)(void* thisPtr, void* edx);
@@ -1561,10 +1584,24 @@ typedef void (__thiscall* CExoEncapsulatedFile_ReleaseSyncClosePtr_t)(int* thisP
 CExoEncapsulatedFile_ReleaseSyncClosePtr_t g_originalCExoEncapsulatedFile_ReleaseSyncClose = nullptr;
 
 void __fastcall Hook_CExoEncapsulatedFile_ReleaseSyncClose(int* thisPtr, void* edxDummy) {
+#if KEEP_ARCHIVE_OPEN_DURING_LOAD
+    // thisPtr[7] is the reference count.
+    // The original closes when ref < 2 (i.e. ref drops to 0). During loading we skip
+    // the close and defer it until ModuleChunkLoadCore finishes.
+    if (g_archiveLoadInProgress && thisPtr[7] < 2) {
+        bool alreadyTracked = false;
+        for (int* p : g_pinnedEncapsulatedArchives) {
+            if (p == thisPtr) { alreadyTracked = true; break; }
+        }
+        if (!alreadyTracked) {
+            g_pinnedEncapsulatedArchives.push_back(thisPtr);
+        }
+        return;
+    }
+#endif
+
     auto start = std::chrono::high_resolution_clock::now();
-
     g_originalCExoEncapsulatedFile_ReleaseSyncClose(thisPtr);
-
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     Log("CExoEncapsulatedFile_ReleaseSyncClose: " + std::to_string(duration.count()) + " μs");

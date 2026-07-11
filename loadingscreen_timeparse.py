@@ -1,7 +1,6 @@
 import sys
 import re
 import statistics
-from concurrent.futures import ProcessPoolExecutor
 
 def metric_pattern(name):
     return re.compile(rf'{re.escape(name)}:\s*(\d+)')
@@ -12,20 +11,30 @@ def parse_loadingscreen_times(file_path,pattern):
     extracts the time in microseconds, and returns (total_time_us, average_time_us, count).
     """
     times = []
+    total = 0
+    count = 0
 
     with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
         for line in f:
             m = pattern.search(line)
             if m:
-                times.append(int(m.group(1)))
+                duration = int(m.group(1))
+                aggregate_count = re.search(r'\bcount=(\d+)', line)
+                weight = int(aggregate_count.group(1)) if aggregate_count else 1
+                if weight < 1:
+                    weight = 1
+                total += duration
+                count += weight
+                # Aggregate profiler lines contain a batch total. Represent every
+                # member with the batch mean so total/count remain correct; the
+                # resulting standard deviation is approximate for those batches.
+                times.extend([duration / weight] * weight)
 
-    count = len(times)
     if count == 0:
         return 0, 0.0, 0, 0.0
     
     std_dev= statistics.stdev(times) if len(times)>1 else 0.0
 
-    total = sum(times)
     average = total / count
     return total, average, count,std_dev
 
@@ -171,26 +180,25 @@ def main():
         "CExoResourceImageFile_ReleaseSyncClose",
     ]
 
-    with ProcessPoolExecutor() as executor:
-        results = executor.map(parse_named_metric, ((name, logfile) for name in patterns))
+    results = [parse_named_metric((name, logfile)) for name in patterns]
 
-        for name, metric_result in results:
-            try:
-                total_us, avg_us, count, std_us = metric_result
-                if count == 0:
-                    print(f"Function data not found for: {name}")
-                    continue
+    for name, metric_result in results:
+        try:
+            total_us, avg_us, count, std_us = metric_result
+            if count == 0:
+                print(f"Function data not found for: {name}")
+                continue
 
-                total_ms = total_us / 1000
-                avg_ms = avg_us / 1000
-                std_ms = std_us / 1000
+            total_ms = total_us / 1000
+            avg_ms = avg_us / 1000
+            std_ms = std_us / 1000
 
-                print(f"=== {name} ===")
-                print(f"Total time:   {total_us} us ({total_ms:.2f} ms)")
-                print(f"Average time: {avg_us:.2f} us ({avg_ms:.2f} ms) over {count} samples")
-                print(f"Std deviation: {std_us:.2f} us ({std_ms:.2f} ms)")
-                print()
-            except Exception as exc:
-                print(f"Failed to parse {name}: {exc}")
+            print(f"=== {name} ===")
+            print(f"Total time:   {total_us} us ({total_ms:.2f} ms)")
+            print(f"Average time: {avg_us:.2f} us ({avg_ms:.2f} ms) over {count} samples")
+            print(f"Std deviation: {std_us:.2f} us ({std_ms:.2f} ms)")
+            print()
+        except Exception as exc:
+            print(f"Failed to parse {name}: {exc}")
 if __name__ == "__main__":
     main()

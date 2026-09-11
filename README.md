@@ -2,12 +2,93 @@
 This mod aims to improve the load times for the steam version of Kotor 2
 
 ## Status
-The mod is in early development, but some small improvements have been made
+The mod is in development. Analysis has mapped the main loading,
+resource-manager, archive I/O, and loading-screen paths. The current patch
+focuses on isolated changes that preserve the game's normal resource parsing
+and initialization behavior.
 
 ### Improvements
-- Initial spalsh screens have been skipped by no oping `PreloadInitialAssetsWrapper`
+- **Initial asset preload no-op:** skips `PreloadInitialAssetsWrapper`, removing
+  the initial splash-screen preload work.
+- **Two-level archive resource cache:** caches successful ERF/MOD/HAK reads at
+  `CExoEncapsulatedFile_ReadResourceSync` and serves repeated synchronous loads
+  from `ResourceLoadFromArchive`. Cache hits bypass repeated archive
+  open/seek/read/close work while retaining the engine's buffer allocation and
+  resource parser callback.
 
-#### Estimated Loading improvment at about: 0%
+In an eight-load A/B test, the archive path was reduced by about 77% (421 ms to
+95 ms total), `ModuleChunkLoadCore` improved by about 8.6%, and total measured
+loading-screen time improved by about 2.5%. The next candidate is applying the
+same cache design to the BIF/KEY archive path.
+
+The profiler also records `LoadTransitionWallTime`, measured from the `Engine`
+tick that activates the load state until the first tick where gameplay resumes.
+Its transition breakdown separates outer main-loop time from nested inclusive
+timers and reports resource-queue draining and worker-submit waits.
+
+### A/B testing
+Optimization toggles are switched as one unit via `AB_SCENARIO` at the top of
+`dinput8.cpp` (`AB_SCENARIO_A` = baseline, `AB_SCENARIO_B` = optimized round 1:
+present throttle + archive cache + debug-GUI skip). Build with
+`cmd /c build_scenario.bat`, then follow the run checklist in `ab_testing.md`.
+Each game session writes a `ProfilerRunStart` line identifying the scenario and
+toggle values, and `loadingscreen_timeparse.py` analyzes the latest run.
+
+### Visual load timeline (2026-09-11)
+Every engine-state anchor (load-state clear, final drain, first post-drain
+present, load-context substate, client busy flag at `*(*(client+4)+0x90)`)
+ends the window at the first black frame — the engine's state machine
+considers the load over while the screen is still black for seconds. To
+measure what the player actually experiences, the profiler now records a
+pixel-classified timeline: before each `SwapBuffers` flip it reads four rows
+of the OpenGL back buffer (`glReadPixels`, resolved dynamically from
+`opengl32.dll`), classifies the frame as **loading** (presented from inside
+`LoadingScreenUpdateFrame`, or pixel-identical to the last such frame =
+frozen loading screen), **black** (max luminance < 12), or **other** (bright
+gameplay/menu), and polls the physical mouse button to anchor the click.
+A load's `VisualLoad` line is emitted only after several consecutive bright
+gameplay frames have been presented; `FrameRun` lines give the per-class
+frame sequence so the classification can be checked against captured video.
+
+Measured warm save-reload (scenario C, `run_id=11974559023701`): **6,605 ms
+click-to-first-gameplay-frame**, matching hand timing (~5–6 s) where every
+engine-anchored metric read 0.4–0.7 s:
+
+| Phase | Measured | Frames |
+|---|---:|---|
+| Click → loading screen visible (frozen menu) | 1,314 ms | 11 (10 pixel-identical) |
+| Loading screen visible | 2,375 ms | 311 |
+| Black window | 2,904 ms | 353 (352 pixel-identical) |
+| **Total** | **6,605 ms** | 682 |
+
+Findings:
+
+- The engine's whole "load" is 408 ms (activation@1,352 ms → end@1,760 ms)
+  inside a 6.6-second load. Everything else is waiting.
+- The 1.3 s pre-activation phase is a frozen menu: 11 frames in 1.3 s, 10 of
+  them pixel-identical — the save read (62 MB of loose-file I/O in this
+  window) blocks rendering before the loading screen even exists.
+- The loading screen runs while the engine's load state is zero
+  (`load_state=0` on every long run). The same frame is re-presented ~33
+  times per ~200 ms — content changes only ~5 times per second. That's the
+  one-queue-stage-per-coordinator-tick pacing, and the fade clamp can't
+  touch it.
+- The black window is 353 frames, 352 pixel-identical, with the engine
+  "done" the entire time. The fade-in doesn't even start until 5,703 ms —
+  3.9 s after the engine finished — and even clamped to 1 ms, the first
+  bright frame takes another ~900 ms after that. So the black window isn't
+  fade animation; it's the engine presenting nothing while something (scene
+  setup/streaming after the fade is scheduled) completes.
+- Total engine busy across the whole 6.6 s: ~340 ms of queue drain, ~63 ms
+  of coordinator work. The load is ~95% deliberate pacing and idle waiting,
+  which confirms the near-zero plan's Layer-1 diagnosis with hard visual
+  evidence.
+
+Optimization targets in measured size order: the ~2.9 s post-engine black
+window, the ~2.0 s of stale-paced loading screen (pump the queue per tick
+instead of one stage per tick), and the ~1.3 s pre-activation freeze
+(byte-cache the 62 MB save read; the scenario-B archive cache already hooks
+that read path).
 
 ## Installation
 Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
@@ -129,6 +210,11 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 |`FUN_00882230` | **ModuleLoader** | This function is a core module and resource loader, primarily used when transitioning between different game areas or beginning a new game. It first sets up the necessary file system paths for game resources and then allocates memory for and initializes the main module object. It performs low-level file I/O to load various resources and also uses a tracing system to log its progress. This function is an integral part of the loading sequence, working with the loading screen manager to ensure a smooth transition into the game world. | no |
 |`FUN_00880740` | **MainMenu_Init** | This function is the constructor for the game's main menu. It initializes the UI, loads the main menu's visual resources, and checks for the existence of game files like GAMEINPROGRESS to enable or disable menu options. It also registers several event handlers, including one for the ModuleLoader, which allows clicking "New Game" or "Load Game" to start the game's loading process. It can also set up a 3D scene for the main menu's background, depending on the game's state. | no |
 |`FUN_0070a620` | **GameState_Manager** | This function is a core state machine manager that controls the high-level flow of the game. It uses a stack-based system to transition the game between various modes, such as the main menu, loading screen, or an active game session. By pushing and popping states, it ensures that the game's logic and resource management are correctly configured for the current context. This is the central function that dictates what the game is doing at any given moment. | no |
+|`FUN_0073f9c0` | **CClientExoApp_MainLoopTick** | Thin wrapper that invokes `Engine` once per main-loop iteration. Together with the global load-state object, this provides the outer boundary for measuring a complete transition. | yes |
+|`FUN_0078cfa0` | **ClientLoadState_FinalizeAndClear** | Handles the final load-state flags and clears the active state and mode. The following `Engine` tick is the first normal gameplay tick after a transition. | yes |
+|`FUN_0055a650` | **ModuleLoad_FinalizeAndQueueReady** | Finalizes the last module/area stage, submits the ready packet, performs resource cleanup, and allows the loading state to set its completion-pending flag. | yes |
+|`FUN_00539860` | **LoadingScreen_UpdateTimeoutCountdown** | Updates the loading watchdog countdown. On expiry it resets the queue/loader or deinitializes the resource subsystem; it is a timeout path, not a normal minimum loading delay. | no |
+|`FUN_00539a90` | **LoadingScreen_UpdateFrameCountdown** | Updates a second loading-screen countdown used for frame/housekeeping state. Its return value is ignored by the normal loading path. | no |
 |`FUN_00409750` | **Graphics_InitAndMainLoop** | This function is responsible for the game's core startup and primary execution loop. It initializes the graphics context, reads display settings from the swkotor2.ini file, and creates a high-priority worker thread for asynchronous tasks. It also manages the game's window, including disabling the desktop taskbar to ensure a full-screen experience. | no |
 |`FUN_00408af0` | **Window_CreateRender** | This function creates a secondary, specialized window dedicated to rendering the game's graphics. It registers a new window class with the name "Render Window," then creates the window itself. The handle to this window is stored in a global variable, DAT_00a1b484, and is the surface where the game's visuals are drawn. | no |
 |`FUN_004763b0` | **ConfigParse** | Takes a filename as a parameter and parses the file. Parses a file named startup.txt, unsure what it is for | no |

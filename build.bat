@@ -21,7 +21,7 @@ echo Building dinput8.dll (32-bit)...
 cl /LD /O2 /MD /DWIN32 /EHsc dinput8.cpp ^
     buffer.obj hook.obj trampoline.obj hde32.obj hde64.obj ^
     /I"minhook\include" ^
-    /link /MACHINE:X86 /DEF:dinput8.def /OUT:dinput8.dll
+    /link /MACHINE:X86 /DEF:dinput8.def /OUT:dinput8.dll user32.lib
 
 set BUILD_RESULT=%ERRORLEVEL%
 

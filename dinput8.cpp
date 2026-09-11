@@ -12,6 +12,7 @@
 
 #define LOGGING_ENABLED 1
 #define LOG_LOADSCREEN_ONLY 0
+#define LOG_HIGH_FREQUENCY_CALLS 0
 // Stability build: install only the small, signature-checked hook set below.  The
 // legacy profiler contains many unrelated detours and is intentionally opt-in.
 #define PERFORMANCE_HOOK_SET_ONLY 1
@@ -20,15 +21,56 @@
 // Never force the engine's platform GUI mode.  On the PC build it leaves app-owned
 // GUI slots null that have no compatible lazy reconstruction path.
 #define ENABLE_NATIVE_LAZY_GUI_MODE 0
-// Stable optimization toggles.  For an A/B run, leave the hook set unchanged and
-// change only these values between 0 (baseline) and 1 (optimized).
+// A/B test scenarios.  Build scenario A (baseline) or B (optimized) by setting
+// AB_SCENARIO below and rebuilding.  The hook set is identical in both scenarios;
+// only these optimization toggles differ, and the active scenario plus every
+// toggle value is written to the ProfilerRunStart log line for post-run parsing.
+#define AB_SCENARIO_A 0
+#define AB_SCENARIO_B 1
+#define AB_SCENARIO_C 2
+#define AB_SCENARIO AB_SCENARIO_C
+
+// Round-1 B scenario: present throttle + archive byte cache + debug-GUI skip.
+// Deliberately excluded from B (isolate in a later round): GUI controls lookup
+// cache (small measured win) and in-game tab deferral (stability experiment).
+// Round-2 C scenario: baseline toggles + long-fade clamp (single-variable
+// experiment vs A).  Load transitions run a 1.0-second fade animation
+// (measured: duration_raw=0x3F800000, once per load); clamping it to 1 ms
+// removes that second of deliberate pacing from every load.
+#if AB_SCENARIO == AB_SCENARIO_B
+#define ENABLE_GUI_CONTROLS_LOOKUP_CACHE 0
+#define THROTTLE_LOADING_SCREEN_PRESENTS 1
+#define LOADING_SCREEN_PRESENT_INTERVAL_MS 100
+#define ENABLE_ARCHIVE_RESOURCE_CACHE 1
+#define SKIP_DEBUG_GUI_CONSTRUCTION 1
+#define DEFER_INGAME_TAB_CONSTRUCTION 0
+#define CLAMP_LONG_FADES 0
+#elif AB_SCENARIO == AB_SCENARIO_C
 #define ENABLE_GUI_CONTROLS_LOOKUP_CACHE 0
 #define THROTTLE_LOADING_SCREEN_PRESENTS 0
 #define LOADING_SCREEN_PRESENT_INTERVAL_MS 100
 #define ENABLE_ARCHIVE_RESOURCE_CACHE 0
-#define ARCHIVE_CACHE_MAX_BYTES (256u * 1024u * 1024u)
 #define SKIP_DEBUG_GUI_CONSTRUCTION 0
 #define DEFER_INGAME_TAB_CONSTRUCTION 0
+#define CLAMP_LONG_FADES 1
+#else
+#define ENABLE_GUI_CONTROLS_LOOKUP_CACHE 0
+#define THROTTLE_LOADING_SCREEN_PRESENTS 0
+#define LOADING_SCREEN_PRESENT_INTERVAL_MS 100
+#define ENABLE_ARCHIVE_RESOURCE_CACHE 0
+#define SKIP_DEBUG_GUI_CONSTRUCTION 0
+#define DEFER_INGAME_TAB_CONSTRUCTION 0
+#define CLAMP_LONG_FADES 0
+#endif
+#define ARCHIVE_CACHE_MAX_BYTES (256u * 1024u * 1024u)
+
+#if AB_SCENARIO == AB_SCENARIO_C
+static const char* const kScenarioName = "c_fadeclamp";
+#elif AB_SCENARIO == AB_SCENARIO_B
+static const char* const kScenarioName = "b_optimized";
+#else
+static const char* const kScenarioName = "a_baseline";
+#endif
 #define PRESERVE_GUI_OBJECTS_ACROSS_LOADS 0
 #define HOOK_GUI_DEEP_GFF_TIMING 0
 #define HOOK_APPSTATE_GET_GUI_CONTEXT_TIMING 0
@@ -57,7 +99,9 @@ bool LogHasPrefix(const std::string& msg, const char* prefix) {
 
 bool ShouldLogMessage(const std::string& msg) {
 #if LOG_LOADSCREEN_ONLY
-    return LogHasPrefix(msg, "loadingscreen:");
+    return LogHasPrefix(msg, "loadingscreen:") ||
+           LogHasPrefix(msg, "LoadTransition") ||
+           LogHasPrefix(msg, "ProfilerRunStart:");
 #else
     return true;
 #endif
@@ -76,6 +120,1322 @@ void Log(const std::string& msg) {
     }
 }
 
+// End-to-end transition profiler.  The load-state object is only a coordinator
+// handshake: it can clear before queued client/module work finishes.  A complete
+// session therefore begins at coordinator preparation and ends only after the
+// idle-state final object/event drain returns.
+struct EngineLoadStateSnapshot {
+    int state;
+    int mode;
+    int currentIndex;
+    int targetOrCount;
+    int beginPending;
+    int finishPending;
+    // Load-context substate at +0x38 (shadow diagnostics only: observed to
+    // stay 0 through a full load, so it is NOT the input gate).
+    int substate;
+    // Client load-busy flag at *(client+0x04)+0x90 (0x0073f2f0).
+    // UpdatePlayerInputAndTargeting (0x007ac470) early-returns while this is
+    // set, making it the engine's actual "input blocked during load" gate.
+    int clientBusy;
+};
+
+struct LoadCoordinatorSnapshot {
+    int preparationPending;
+    short managerStatus;
+};
+
+struct LoadTransitionProfile {
+    bool active;
+    DWORD ownerThreadId;
+    unsigned int id;
+    const char* startReason;
+    LARGE_INTEGER start;
+    EngineLoadStateSnapshot startState;
+    bool stateActivationSeen;
+    LARGE_INTEGER stateActivated;
+    bool coordinatorClearSeen;
+    LARGE_INTEGER coordinatorCleared;
+    bool finalDrainSeen;
+    LARGE_INTEGER finalDrainStarted;
+    bool presentedFrameSeen;
+    LARGE_INTEGER firstPresentedFrame;
+    LARGE_INTEGER lastPresentedFrameEnd;
+    unsigned int presentedFrameCalls;
+    bool moduleWindowSeen;
+    LARGE_INTEGER firstModuleStart;
+    LARGE_INTEGER lastModuleEnd;
+    long long moduleChunkMaxCallUs;
+    bool archiveWindowSeen;
+    LARGE_INTEGER firstArchiveStart;
+    LARGE_INTEGER lastArchiveEnd;
+    long long engineUs;
+    unsigned int engineCalls;
+    long long outerLoadingScreenUs;
+    unsigned int outerLoadingScreenCalls;
+    long long moduleChunkUs;
+    unsigned int moduleChunkCalls;
+    long long loadingFrameUs;
+    unsigned int loadingFrameCalls;
+    long long archiveUs;
+    unsigned int archiveCalls;
+    long long workerSubmitWaitUs;
+    unsigned int workerSubmitCalls;
+    long long resourceQueueDrainUs;
+    unsigned int resourceQueueDrainCalls;
+};
+
+static LoadTransitionProfile g_loadTransition = {};
+static unsigned int g_nextLoadTransitionId = 0;
+static unsigned long long g_profilerRunId = 0;
+thread_local int g_loadingscreenDepth = 0;
+thread_local bool g_finishTransitionAtOutermostReturn = false;
+
+static long long QpcElapsedUs(LARGE_INTEGER start, LARGE_INTEGER end) {
+    static LARGE_INTEGER frequency = {};
+    if (frequency.QuadPart == 0) {
+        QueryPerformanceFrequency(&frequency);
+    }
+    if (frequency.QuadPart <= 0 || end.QuadPart < start.QuadPart) {
+        return 0;
+    }
+    return ((end.QuadPart - start.QuadPart) * 1000000LL) / frequency.QuadPart;
+}
+
+static bool TryReadEngineLoadState(EngineLoadStateSnapshot& snapshot) {
+    __try {
+        int root = *(int*)0x00a1b4a4;
+        if (root == 0) {
+            return false;
+        }
+        int loadState = *(int*)(root + 0x14);
+        if (loadState == 0) {
+            return false;
+        }
+        snapshot.state = *(int*)(loadState + 0x00);
+        snapshot.mode = *(int*)(loadState + 0x04);
+        snapshot.currentIndex = *(int*)(loadState + 0x08);
+        snapshot.targetOrCount = *(int*)(loadState + 0x0c);
+        snapshot.beginPending = *(int*)(loadState + 0x10);
+        snapshot.finishPending = *(int*)(loadState + 0x14);
+        snapshot.substate = *(int*)(loadState + 0x38);
+        snapshot.clientBusy = 0;
+        int client = *(int*)(root + 0x04);
+        if (client != 0) {
+            // FUN_0073f2f0(client) == *(*(client + 0x04) + 0x90): the flag
+            // lives one object below the client, not on the client itself.
+            int inner = *(int*)(client + 0x04);
+            if (inner != 0) {
+                snapshot.clientBusy = *(int*)(inner + 0x90);
+            }
+        }
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+static bool TryReadLoadCoordinator(
+    int manager, LoadCoordinatorSnapshot& snapshot) {
+    if (manager == 0) {
+        return false;
+    }
+    __try {
+        snapshot.preparationPending = *(int*)(manager + 0x10080);
+        snapshot.managerStatus = *(short*)(manager + 0x10008);
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+static bool TryReadGlobalLoadCoordinator(
+    int& manager, LoadCoordinatorSnapshot& snapshot) {
+    __try {
+        int root = *(int*)0x00a1b4a4;
+        if (root == 0) {
+            return false;
+        }
+        manager = *(int*)(root + 0x08);
+        return TryReadLoadCoordinator(manager, snapshot);
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+// True perceived load window: from the player's load action (LoadGame entry,
+// i.e. the Load button) to the first presented frame after the load transition
+// ends.  The transition window above deliberately starts at engine load-state
+// activation, which excludes the save read/deserialization before activation
+// and the fade-in/first-frame work after the final drain; this tracker measures
+// what the player actually waits through.
+struct PerceivedLoadProfile {
+    bool active;
+    DWORD ownerThreadId;
+    unsigned int id;
+    const char* startSource;
+    LARGE_INTEGER start;
+    bool transitionStarted;
+    LARGE_INTEGER transitionStart;
+    bool transitionEnded;
+    LARGE_INTEGER transitionEnd;
+    unsigned int loadingPresents;
+    unsigned int postDrainPresents;
+    bool lastPresentBeforeTransitionSeen;
+    LARGE_INTEGER lastPresentBeforeTransition;
+    LARGE_INTEGER lastPostDrainPresent;
+    long long postGap1Us;
+    long long postGap2Us;
+    long long postGap3Us;
+};
+static PerceivedLoadProfile g_perceivedLoad = {};
+static unsigned int g_nextPerceivedLoadId = 0;
+
+// Click-to-control tracker.  The perceived-load window ends at the first
+// presented frame after the drain, but the 2026-09-11 frame-captured session
+// proved that frame is BLACK: the engine then presents ~2.6 s of identical
+// black frames while it finishes the module packet drain, the area 3D scene
+// full-load, and the loose-file read storm, and input stays locked until the
+// client busy flag (client+0x90) clears — the gate that early-outs
+// UpdatePlayerInputAndTargeting.  This tracker starts at the same click
+// anchor as the perceived window but ends at the first Engine tick where
+// that flag reads 0, which is the moment the player can actually play.
+// Substate/client-busy values are shadow-logged on change so the gate
+// semantics stay verified against real builds.
+struct ClickToControlProfile {
+    bool armed;
+    unsigned int id;
+    const char* clickSource;
+    LARGE_INTEGER click;
+    bool transitionStartSeen;
+    LARGE_INTEGER transitionStart;
+    bool firstPresentSeen;
+    LARGE_INTEGER firstPresent;
+    int lastSubstate;
+    int lastGateValue;
+    bool lastSubstateValid;
+    // Set once the gate has read nonzero after the click.  A 0 that was never
+    // preceded by a busy reading is not an "unblock" and must not be reported
+    // as one (that is how a wrong offset would masquerade as a 0 ms window).
+    bool gateSeenBusy;
+    unsigned int substateLogs;
+};
+static ClickToControlProfile g_clickToControl = {};
+
+// Per-load loadingscreen accumulator.  The coordinator tick runs across ALL
+// load phases (menu, prep, activation, drain) and its busy-time sum was the
+// original crude-but-accurate whole-load metric: it lands far closer to hand
+// timing than the state-activation window alone.  Accumulated continuously,
+// stamped into each PerceivedLoadWallTime line, reset at each load's end.
+static unsigned int g_lsCallsSinceLoad = 0;
+static long long g_lsBusyUsSinceLoad = 0;
+static LARGE_INTEGER g_lsFirstCallSinceLoad = {};
+
+// Packet-pipeline accumulators (per load window): the pre-activation save
+// load runs through ProcessResourceQueue -> P/S packet handlers on the main
+// thread, so per-major P-packet busy time attributes the pre-activation work.
+static unsigned int g_prqCallsSinceLoad = 0;
+static long long g_prqBusyUsSinceLoad = 0;
+static unsigned int g_ppCallsSinceLoad = 0;
+static long long g_ppBusyUsSinceLoad = 0;
+static unsigned int g_spCallsSinceLoad = 0;
+static long long g_spBusyUsSinceLoad = 0;
+static unsigned int g_ppMajorCalls[256] = {};
+static long long g_ppMajorUs[256] = {};
+
+// Load diagnostics (per load window): fade animations, per-tick graphics/
+// shadow cache scans, loose-file I/O — the Layer-1/2 targets of the
+// near-zero load plan.
+static unsigned int g_fadeCallsSinceLoad = 0;
+static long long g_fadeBusyUsSinceLoad = 0;
+static unsigned int g_fadeClampsSinceLoad = 0;
+static unsigned int g_igcCallsSinceLoad = 0;
+static long long g_igcBusyUsSinceLoad = 0;
+static unsigned int g_iscCallsSinceLoad = 0;
+static long long g_iscBusyUsSinceLoad = 0;
+static unsigned int g_lfOpenCallsSinceLoad = 0;
+static long long g_lfOpenBusyUsSinceLoad = 0;
+static unsigned int g_lfReadCallsSinceLoad = 0;
+static long long g_lfReadBusyUsSinceLoad = 0;
+static long long g_lfReadBytesSinceLoad = 0;
+
+// Fire counters for validation.  A hook that installs but never fires (wrong
+// call path, engine build change) must be visible in the log instead of being
+// discovered by accident after a wasted test run.  The save-load anchor count
+// is stamped into every PerceivedLoadWallTime line; all counters are dumped at
+// DLL detach.
+static volatile LONG64 g_hookCalls_LoadGame = 0;
+static volatile LONG64 g_hookCalls_SaveLoadRequest = 0;
+static volatile LONG64 g_hookCalls_PopulateSave = 0;
+static volatile LONG64 g_hookCalls_GameSaveLoadCore = 0;
+static volatile LONG64 g_hookCalls_SwapBuffers = 0;
+
+// Save/load state-machine core accumulator (per load): stage-bucketed busy
+// time plus first/last call stamps so busy-vs-span shows the pipeline gating.
+struct GameSaveLoadCoreBatch {
+    uint32_t calls;
+    int64_t totalUs;
+    int64_t maxUs;
+    LARGE_INTEGER firstCall;
+    LARGE_INTEGER lastCall;
+    uint32_t stageCalls[8];
+    int64_t stageUs[8];
+};
+static GameSaveLoadCoreBatch g_gslc = {};
+static volatile LONG64 g_hookCalls_Loadingscreen = 0;
+static volatile LONG64 g_hookCalls_Engine = 0;
+// Timestamp of the most recent SwapBuffers completion.  If the main thread
+// freezes (e.g. synchronous save read before load-state activation), the gap
+// between this stamp and the transition start measures the frozen period.
+static LARGE_INTEGER g_lastPresentQpc = {};
+
+static void DumpProfilerHookCounts(const char* reason) {
+    Log("ProfilerHookCounts: " + std::string(reason) +
+        " loadgame=" + std::to_string(InterlockedCompareExchange64(&g_hookCalls_LoadGame, 0, 0)) +
+        " save_load_request=" + std::to_string(InterlockedCompareExchange64(&g_hookCalls_SaveLoadRequest, 0, 0)) +
+        " swapbuffers=" + std::to_string(InterlockedCompareExchange64(&g_hookCalls_SwapBuffers, 0, 0)) +
+        " loadingscreen=" + std::to_string(InterlockedCompareExchange64(&g_hookCalls_Loadingscreen, 0, 0)) +
+        " engine=" + std::to_string(InterlockedCompareExchange64(&g_hookCalls_Engine, 0, 0)) +
+        " populate_save=" + std::to_string(InterlockedCompareExchange64(&g_hookCalls_PopulateSave, 0, 0)) +
+        " gamesaveload_core=" + std::to_string(InterlockedCompareExchange64(&g_hookCalls_GameSaveLoadCore, 0, 0)));
+}
+
+// ---------------------------------------------------------------------------
+// Visual load timeline.
+//
+// Every engine-state anchor tried so far (load-state clear, final drain,
+// first post-drain present, load-context substate, client busy flag) closes
+// the window at the FIRST BLACK FRAME: a 5 fps video of a reload showed the
+// loading screen for ~2.4 s and then a byte-identical black screen for ~2.6 s
+// before control returned, while the engine-anchored logs reported ~0.3-0.5 s.
+// This tracker measures what the video measures.  At every present it samples
+// four thin rows of the back buffer, classifies the frame (black / loading
+// screen / other), polls the physical mouse button for the click, and once a
+// load has ended AND several consecutive bright non-loading frames have been
+// presented it emits one VisualLoad line with the frame-derived anatomy
+// (click -> loading screen -> black -> first gameplay frame) plus compact
+// FrameRun lines so the classification itself can be checked against video.
+#define ENABLE_VISUAL_LOAD_TIMELINE 1
+
+typedef void (APIENTRY* VlGlReadPixels_t)(int, int, int, int, unsigned int, unsigned int, void*);
+typedef void (APIENTRY* VlGlGetIntegerv_t)(unsigned int, int*);
+typedef void (APIENTRY* VlGlPixelStorei_t)(unsigned int, int);
+typedef void (APIENTRY* VlGlReadBuffer_t)(unsigned int);
+typedef unsigned int (APIENTRY* VlGlGetError_t)();
+typedef HGLRC (WINAPI* VlWglGetCurrentContext_t)();
+
+#define VL_GL_RGB 0x1907
+#define VL_GL_UNSIGNED_BYTE 0x1401
+#define VL_GL_VIEWPORT 0x0BA2
+#define VL_GL_PACK_ALIGNMENT 0x0D05
+#define VL_GL_READ_BUFFER 0x0C02
+#define VL_GL_BACK 0x0405
+
+enum VisualFrameClass : unsigned char {
+    VL_FRAME_OTHER = 0,
+    VL_FRAME_LOADING = 1,        // presented from inside LoadingScreenUpdateFrame
+    VL_FRAME_LOADING_STALE = 2,  // pixel-identical to the last such frame
+    VL_FRAME_BLACK = 3,
+    VL_FRAME_UNSAMPLED = 4,
+};
+
+static const char* VisualFrameClassName(unsigned char cls) {
+    switch (cls) {
+        case VL_FRAME_OTHER: return "other";
+        case VL_FRAME_LOADING: return "loading";
+        case VL_FRAME_LOADING_STALE: return "loading_stale";
+        case VL_FRAME_BLACK: return "black";
+        default: return "unsampled";
+    }
+}
+
+struct VisualFrameSample {
+    LARGE_INTEGER qpc;
+    unsigned int hash;
+    unsigned char cls;
+    unsigned char maxLum;
+    unsigned char meanLum;
+    unsigned char loadState;
+};
+
+struct VisualClickSample {
+    LARGE_INTEGER qpc;
+    char source;  // 'm' mouse left button, 'k' keyboard Return/Space
+};
+
+static const unsigned int VL_RING_SIZE = 1024;
+static const unsigned int VL_CLICK_RING_SIZE = 32;
+static VisualFrameSample g_vlRing[VL_RING_SIZE] = {};
+static unsigned int g_vlRingWrite = 0;  // total presents recorded (index = n % size)
+static VisualClickSample g_vlClicks[VL_CLICK_RING_SIZE] = {};
+static unsigned int g_vlClickWrite = 0;
+static bool g_vlPrevLButtonDown = false;
+static bool g_vlPrevKeyDown = false;
+static unsigned int g_vlLastLoadingHash = 0;
+static bool g_vlLastLoadingHashValid = false;
+static thread_local int g_vlLoadingScreenFrameDepth = 0;
+static std::vector<unsigned char> g_vlRowBuffer;
+
+static VlGlReadPixels_t g_vlGlReadPixels = nullptr;
+static VlGlGetIntegerv_t g_vlGlGetIntegerv = nullptr;
+static VlGlPixelStorei_t g_vlGlPixelStorei = nullptr;
+static VlGlReadBuffer_t g_vlGlReadBuffer = nullptr;
+static VlGlGetError_t g_vlGlGetError = nullptr;
+static VlWglGetCurrentContext_t g_vlWglGetCurrentContext = nullptr;
+static bool g_vlGlResolved = false;
+static bool g_vlGlUnavailableLogged = false;
+
+struct VisualLoadTracker {
+    bool active;
+    unsigned int id;
+    LARGE_INTEGER armed;
+    unsigned int armRingIndex;
+    bool perceivedEndSeen;
+    LARGE_INTEGER perceivedEnd;
+    bool fadeSeen;
+    LARGE_INTEGER fade;
+    int fadeMode;
+    float fadeSeconds;
+    unsigned int consecutiveBrightOther;
+    unsigned int emitted;
+};
+static VisualLoadTracker g_visualLoad = {};
+
+static void ResolveVisualGl() {
+    if (g_vlGlResolved) {
+        return;
+    }
+    g_vlGlResolved = true;
+    HMODULE gl = GetModuleHandleA("opengl32.dll");
+    if (gl == nullptr) {
+        return;
+    }
+    g_vlGlReadPixels = (VlGlReadPixels_t)GetProcAddress(gl, "glReadPixels");
+    g_vlGlGetIntegerv = (VlGlGetIntegerv_t)GetProcAddress(gl, "glGetIntegerv");
+    g_vlGlPixelStorei = (VlGlPixelStorei_t)GetProcAddress(gl, "glPixelStorei");
+    g_vlGlReadBuffer = (VlGlReadBuffer_t)GetProcAddress(gl, "glReadBuffer");
+    g_vlGlGetError = (VlGlGetError_t)GetProcAddress(gl, "glGetError");
+    g_vlWglGetCurrentContext =
+        (VlWglGetCurrentContext_t)GetProcAddress(gl, "wglGetCurrentContext");
+}
+
+// Samples four full-width rows (1/8, 3/8, 5/8, 7/8 of the height) of the
+// buffer about to be presented.  Returns false when no GL context is current
+// on this thread or the read fails; the frame is then recorded as unsampled.
+static bool SampleBackBuffer(HDC hdc, unsigned char& maxLum, unsigned char& meanLum,
+                             unsigned int& hash) {
+    ResolveVisualGl();
+    if (g_vlGlReadPixels == nullptr || g_vlGlGetIntegerv == nullptr ||
+        g_vlWglGetCurrentContext == nullptr) {
+        return false;
+    }
+    if (g_vlWglGetCurrentContext() == nullptr) {
+        return false;
+    }
+    int width = 0;
+    int height = 0;
+    HWND window = WindowFromDC(hdc);
+    RECT client = {};
+    if (window != nullptr && GetClientRect(window, &client)) {
+        width = client.right - client.left;
+        height = client.bottom - client.top;
+    }
+    if (width <= 0 || height <= 0) {
+        int viewport[4] = {};
+        g_vlGlGetIntegerv(VL_GL_VIEWPORT, viewport);
+        width = viewport[2];
+        height = viewport[3];
+    }
+    if (width <= 0 || height < 8 || width > 8192) {
+        return false;
+    }
+    const size_t rowBytes = (size_t)width * 3;
+    if (g_vlRowBuffer.size() < rowBytes * 4) {
+        g_vlRowBuffer.resize(rowBytes * 4);
+    }
+    int savedAlignment = 4;
+    int savedReadBuffer = VL_GL_BACK;
+    g_vlGlGetIntegerv(VL_GL_PACK_ALIGNMENT, &savedAlignment);
+    g_vlGlGetIntegerv(VL_GL_READ_BUFFER, &savedReadBuffer);
+    if (g_vlGlPixelStorei != nullptr) {
+        g_vlGlPixelStorei(VL_GL_PACK_ALIGNMENT, 1);
+    }
+    if (g_vlGlReadBuffer != nullptr && savedReadBuffer != VL_GL_BACK) {
+        g_vlGlReadBuffer(VL_GL_BACK);
+    }
+    if (g_vlGlGetError != nullptr) {
+        g_vlGlGetError();  // clear any stale error so we see our own
+    }
+    for (int r = 0; r < 4; ++r) {
+        int y = (height * (2 * r + 1)) / 8;
+        g_vlGlReadPixels(0, y, width, 1, VL_GL_RGB, VL_GL_UNSIGNED_BYTE,
+                         g_vlRowBuffer.data() + rowBytes * r);
+    }
+    bool ok = g_vlGlGetError == nullptr || g_vlGlGetError() == 0;
+    if (g_vlGlReadBuffer != nullptr && savedReadBuffer != VL_GL_BACK) {
+        g_vlGlReadBuffer((unsigned int)savedReadBuffer);
+    }
+    if (g_vlGlPixelStorei != nullptr) {
+        g_vlGlPixelStorei(VL_GL_PACK_ALIGNMENT, savedAlignment);
+    }
+    if (!ok) {
+        return false;
+    }
+    unsigned int h = 2166136261u;
+    unsigned int maxV = 0;
+    unsigned long long sum = 0;
+    const size_t total = rowBytes * 4;
+    const unsigned char* p = g_vlRowBuffer.data();
+    for (size_t i = 0; i < total; ++i) {
+        unsigned int v = p[i];
+        sum += v;
+        if (v > maxV) {
+            maxV = v;
+        }
+        // Quantize so a one-LSB difference does not break stale-frame matching.
+        h ^= (v >> 3);
+        h *= 16777619u;
+    }
+    maxLum = (unsigned char)maxV;
+    meanLum = (unsigned char)(sum / total);
+    hash = h;
+    return true;
+}
+
+static void PollInputForClicks(LARGE_INTEGER now) {
+    SHORT lb = GetAsyncKeyState(VK_LBUTTON);
+    bool down = (lb & 0x8000) != 0;
+    // Bit 0: pressed since the previous poll — catches a press+release that
+    // fit entirely inside one frame (e.g. during a stalled frame).
+    bool edge = (down && !g_vlPrevLButtonDown) ||
+                (!down && !g_vlPrevLButtonDown && (lb & 1) != 0);
+    g_vlPrevLButtonDown = down;
+    if (edge) {
+        VisualClickSample& c = g_vlClicks[g_vlClickWrite % VL_CLICK_RING_SIZE];
+        c.qpc = now;
+        c.source = 'm';
+        ++g_vlClickWrite;
+    }
+    bool keyDown = (GetAsyncKeyState(VK_RETURN) & 0x8000) != 0 ||
+                   (GetAsyncKeyState(VK_SPACE) & 0x8000) != 0;
+    if (keyDown && !g_vlPrevKeyDown) {
+        VisualClickSample& c = g_vlClicks[g_vlClickWrite % VL_CLICK_RING_SIZE];
+        c.qpc = now;
+        c.source = 'k';
+        ++g_vlClickWrite;
+    }
+    g_vlPrevKeyDown = keyDown;
+}
+
+static bool IsLoadingClass(unsigned char cls) {
+    return cls == VL_FRAME_LOADING || cls == VL_FRAME_LOADING_STALE;
+}
+
+static void ArmVisualLoad(unsigned int id, LARGE_INTEGER now);
+
+static void EmitVisualLoad(LARGE_INTEGER now, const char* endReason) {
+    VisualLoadTracker t = g_visualLoad;
+    g_visualLoad = {};
+    if (!t.active) {
+        return;
+    }
+    const unsigned int available = g_vlRingWrite < VL_RING_SIZE ? g_vlRingWrite : VL_RING_SIZE;
+    const unsigned int end = g_vlRingWrite;  // exclusive
+    const unsigned int oldest = end - available;
+
+    // Walk back from arming until a frame that is neither loading-like nor
+    // black, then keep going while it is within 10 s of arming to include the
+    // last menu frames before the click; the click search below is what
+    // actually decides where the report starts.
+    unsigned int start = t.armRingIndex < oldest ? oldest : t.armRingIndex;
+    while (start > oldest) {
+        const VisualFrameSample& f = g_vlRing[(start - 1) % VL_RING_SIZE];
+        if (QpcElapsedUs(f.qpc, t.armed) > 10000000LL) {
+            break;
+        }
+        --start;
+    }
+
+    // First loading-like frame at or before arming (searching forward from
+    // start so the earliest of the contiguous pre-activation run wins), falling
+    // back to the first loading-like frame after arming.
+    long long firstLoadingIdx = -1;
+    for (unsigned int i = start; i < end; ++i) {
+        if (IsLoadingClass(g_vlRing[i % VL_RING_SIZE].cls)) {
+            firstLoadingIdx = i;
+            break;
+        }
+    }
+    // Click: latest click strictly before the first loading frame (or before
+    // arming when no loading frame was ever classified), within 15 s.
+    LARGE_INTEGER clickBefore = firstLoadingIdx >= 0
+        ? g_vlRing[(unsigned int)firstLoadingIdx % VL_RING_SIZE].qpc : t.armed;
+    bool clickSeen = false;
+    char clickSource = '-';
+    LARGE_INTEGER click = {};
+    const unsigned int clicksAvailable =
+        g_vlClickWrite < VL_CLICK_RING_SIZE ? g_vlClickWrite : VL_CLICK_RING_SIZE;
+    for (unsigned int k = 0; k < clicksAvailable; ++k) {
+        const VisualClickSample& c = g_vlClicks[(g_vlClickWrite - 1 - k) % VL_CLICK_RING_SIZE];
+        if (c.qpc.QuadPart < clickBefore.QuadPart) {
+            if (QpcElapsedUs(c.qpc, clickBefore) <= 15000000LL) {
+                clickSeen = true;
+                click = c.qpc;
+                clickSource = c.source;
+            }
+            break;
+        }
+    }
+    LARGE_INTEGER t0 = clickSeen ? click
+        : (firstLoadingIdx >= 0 ? g_vlRing[(unsigned int)firstLoadingIdx % VL_RING_SIZE].qpc
+                                : t.armed);
+    const char* ref = clickSeen ? "click" : (firstLoadingIdx >= 0 ? "first_loading" : "activation");
+    // Report from the click (or 1 s before the first loading frame) onward.
+    unsigned int reportStart = start;
+    for (unsigned int i = start; i < end; ++i) {
+        const VisualFrameSample& f = g_vlRing[i % VL_RING_SIZE];
+        if (f.qpc.QuadPart >= t0.QuadPart - (clickSeen ? 0 : 0)) {
+            reportStart = i > start ? i - 1 : i;  // include the last pre-click frame
+            break;
+        }
+    }
+
+    // Build class runs and derive the anatomy.
+    long long lastLoadingIdx = -1;
+    long long firstBlackAfterLoading = -1;
+    long long lastBlackAfterLoading = -1;
+    long long firstGameplayIdx = -1;
+    unsigned int loadingFrames = 0;
+    unsigned int blackFrames = 0;
+    for (unsigned int i = (unsigned int)(firstLoadingIdx >= 0 ? firstLoadingIdx : reportStart);
+         i < end; ++i) {
+        const VisualFrameSample& f = g_vlRing[i % VL_RING_SIZE];
+        if (IsLoadingClass(f.cls)) {
+            if (firstGameplayIdx < 0) {
+                lastLoadingIdx = i;
+                ++loadingFrames;
+                firstBlackAfterLoading = -1;
+                lastBlackAfterLoading = -1;
+                blackFrames = 0;
+            }
+        } else if (f.cls == VL_FRAME_BLACK) {
+            if (firstGameplayIdx < 0 && (lastLoadingIdx >= 0 || firstLoadingIdx < 0)) {
+                if (firstBlackAfterLoading < 0) {
+                    firstBlackAfterLoading = i;
+                }
+                lastBlackAfterLoading = i;
+                ++blackFrames;
+            }
+        } else if (f.cls == VL_FRAME_OTHER) {
+            if (firstGameplayIdx < 0 && (lastLoadingIdx >= 0 || firstLoadingIdx < 0) &&
+                (unsigned int)i > t.armRingIndex) {
+                firstGameplayIdx = i;
+            }
+        }
+    }
+
+    auto rel = [&](long long idx) -> long long {
+        return idx < 0 ? -1 : QpcElapsedUs(t0, g_vlRing[(unsigned int)idx % VL_RING_SIZE].qpc);
+    };
+    long long firstLoadingUs = rel(firstLoadingIdx);
+    long long lastLoadingUs = rel(lastLoadingIdx);
+    long long firstBlackUs = rel(firstBlackAfterLoading);
+    long long lastBlackUs = rel(lastBlackAfterLoading);
+    long long firstGameplayUs = rel(firstGameplayIdx);
+    long long loadingUs = (firstLoadingIdx >= 0 && lastLoadingIdx >= 0)
+        ? lastLoadingUs - firstLoadingUs : -1;
+    long long blackUs = (firstBlackAfterLoading >= 0 && lastBlackAfterLoading >= 0)
+        ? (firstGameplayIdx >= 0 ? firstGameplayUs - firstBlackUs : lastBlackUs - firstBlackUs)
+        : -1;
+    long long totalUs = firstGameplayIdx >= 0 ? firstGameplayUs : QpcElapsedUs(t0, now);
+
+    Log("VisualLoad: " + std::to_string(totalUs) +
+        " us run_id=" + std::to_string(g_profilerRunId) +
+        " id=" + std::to_string(t.id) +
+        " ref=" + ref +
+        " click_seen=" + std::to_string(clickSeen ? 1 : 0) +
+        " click_source=" + std::string(1, clickSource) +
+        " end_reason=" + std::string(endReason) +
+        " first_loading_us=" + std::to_string(firstLoadingUs) +
+        " loading_us=" + std::to_string(loadingUs) +
+        " loading_frames=" + std::to_string(loadingFrames) +
+        " first_black_us=" + std::to_string(firstBlackUs) +
+        " black_us=" + std::to_string(blackUs) +
+        " black_frames=" + std::to_string(blackFrames) +
+        " first_gameplay_us=" + std::to_string(firstGameplayUs) +
+        " activation_us=" + std::to_string(QpcElapsedUs(t0, t.armed)) +
+        " perceived_end_us=" + std::to_string(
+            t.perceivedEndSeen ? QpcElapsedUs(t0, t.perceivedEnd) : -1) +
+        " fade_us=" + std::to_string(t.fadeSeen ? QpcElapsedUs(t0, t.fade) : -1) +
+        " fade_mode=" + std::to_string(t.fadeSeen ? t.fadeMode : -1) +
+        " fade_seconds=" + std::to_string(t.fadeSeen ? t.fadeSeconds : 0.0f) +
+        " frames=" + std::to_string(end - reportStart));
+
+    // Run-length by class so the classification can be checked against video.
+    unsigned int runNo = 0;
+    unsigned int i = reportStart;
+    while (i < end) {
+        const VisualFrameSample& first = g_vlRing[i % VL_RING_SIZE];
+        unsigned int j = i;
+        unsigned int staticFrames = 0;
+        unsigned long long lumSum = 0;
+        unsigned int prevHash = 0;
+        bool prevHashValid = false;
+        while (j < end && g_vlRing[j % VL_RING_SIZE].cls == first.cls) {
+            const VisualFrameSample& f = g_vlRing[j % VL_RING_SIZE];
+            if (prevHashValid && f.hash == prevHash) {
+                ++staticFrames;
+            }
+            prevHash = f.hash;
+            prevHashValid = true;
+            lumSum += f.meanLum;
+            ++j;
+        }
+        const VisualFrameSample& last = g_vlRing[(j - 1) % VL_RING_SIZE];
+        LARGE_INTEGER runEnd = j < end ? g_vlRing[j % VL_RING_SIZE].qpc : last.qpc;
+        if (runNo < 64) {
+            Log("FrameRun: id=" + std::to_string(t.id) +
+                " n=" + std::to_string(runNo) +
+                " class=" + VisualFrameClassName(first.cls) +
+                " start_us=" + std::to_string(QpcElapsedUs(t0, first.qpc)) +
+                " dur_us=" + std::to_string(QpcElapsedUs(first.qpc, runEnd)) +
+                " frames=" + std::to_string(j - i) +
+                " static=" + std::to_string(staticFrames) +
+                " mean_lum=" + std::to_string(lumSum / (j - i)) +
+                " load_state=" + std::to_string((int)first.loadState));
+        }
+        ++runNo;
+        i = j;
+    }
+}
+
+static void ArmVisualLoad(unsigned int id, LARGE_INTEGER now) {
+    if (g_visualLoad.active) {
+        EmitVisualLoad(now, "rearmed");
+    }
+    g_visualLoad = {};
+    g_visualLoad.active = true;
+    g_visualLoad.id = id;
+    g_visualLoad.armed = now;
+    g_visualLoad.armRingIndex = g_vlRingWrite;
+}
+
+// Called from Hook_SwapBuffers BEFORE the original SwapBuffers so the sampled
+// pixels are the frame about to be shown.
+static void RecordVisualFrame(HDC hdc, LARGE_INTEGER now) {
+    PollInputForClicks(now);
+    VisualFrameSample s = {};
+    s.qpc = now;
+    unsigned char maxLum = 0;
+    unsigned char meanLum = 0;
+    unsigned int hash = 0;
+    bool sampled = SampleBackBuffer(hdc, maxLum, meanLum, hash);
+    EngineLoadStateSnapshot state = {};
+    if (TryReadEngineLoadState(state)) {
+        s.loadState = (unsigned char)(state.state & 0xff);
+    }
+    if (!sampled) {
+        s.cls = VL_FRAME_UNSAMPLED;
+        if (!g_vlGlUnavailableLogged) {
+            g_vlGlUnavailableLogged = true;
+            Log("VisualLoad: back-buffer sampling unavailable on this present path");
+        }
+    } else {
+        s.hash = hash;
+        s.maxLum = maxLum;
+        s.meanLum = meanLum;
+        if (g_vlLoadingScreenFrameDepth > 0) {
+            s.cls = VL_FRAME_LOADING;
+            g_vlLastLoadingHash = hash;
+            g_vlLastLoadingHashValid = true;
+        } else if (maxLum < 12) {
+            s.cls = VL_FRAME_BLACK;
+        } else if (g_vlLastLoadingHashValid && hash == g_vlLastLoadingHash) {
+            s.cls = VL_FRAME_LOADING_STALE;
+        } else {
+            s.cls = VL_FRAME_OTHER;
+        }
+    }
+    g_vlRing[g_vlRingWrite % VL_RING_SIZE] = s;
+    ++g_vlRingWrite;
+
+    if (g_visualLoad.active) {
+        if (s.cls == VL_FRAME_OTHER) {
+            ++g_visualLoad.consecutiveBrightOther;
+        } else if (s.cls != VL_FRAME_UNSAMPLED) {
+            g_visualLoad.consecutiveBrightOther = 0;
+        }
+        bool loadOver = g_visualLoad.perceivedEndSeen && !g_perceivedLoad.active;
+        if (loadOver && g_visualLoad.consecutiveBrightOther >= 5) {
+            EmitVisualLoad(now, "gameplay_frames");
+        } else if (QpcElapsedUs(g_visualLoad.armed, now) > 60000000LL) {
+            EmitVisualLoad(now, "timeout");
+        }
+    }
+}
+
+static void StartLoadPerceived(const char* startSource, LARGE_INTEGER now) {
+    if (g_perceivedLoad.active) {
+        return;
+    }
+    g_perceivedLoad = {};
+    g_perceivedLoad.active = true;
+    g_perceivedLoad.ownerThreadId = GetCurrentThreadId();
+    g_perceivedLoad.id = ++g_nextPerceivedLoadId;
+    g_perceivedLoad.startSource = startSource;
+    g_perceivedLoad.start = now;
+    g_clickToControl = {};
+    g_clickToControl.armed = true;
+    g_clickToControl.id = g_perceivedLoad.id;
+    g_clickToControl.clickSource = startSource;
+    g_clickToControl.click = now;
+#if ENABLE_VISUAL_LOAD_TIMELINE
+    ArmVisualLoad(g_perceivedLoad.id, now);
+#endif
+}
+
+static std::string ToHexByte(int value) {
+    if (value < 0) {
+        return std::string("--");
+    }
+    char buffer[8];
+    sprintf_s(buffer, sizeof(buffer), "%02X", value);
+    return std::string(buffer);
+}
+
+static void FinishPerceivedLoad(LARGE_INTEGER end, const char* endReason) {
+    PerceivedLoadProfile completed = g_perceivedLoad;
+    g_perceivedLoad.active = false;
+#if ENABLE_VISUAL_LOAD_TIMELINE
+    // The engine-anchored window is over, but the visible load may not be:
+    // the visual tracker stays armed until bright gameplay frames actually
+    // appear on screen.
+    if (g_visualLoad.active) {
+        g_visualLoad.perceivedEndSeen = true;
+        g_visualLoad.perceivedEnd = end;
+    }
+#endif
+    if (!completed.transitionEnded && g_clickToControl.armed) {
+        // Window expired before any load transition (cancelled load,
+        // save-only action): drop the click-to-control tracker with it so no
+        // stale window emits later.
+        g_clickToControl = {};
+    }
+    long long wallUs = QpcElapsedUs(completed.start, end);
+    long long preActivationUs = completed.transitionStarted
+        ? QpcElapsedUs(completed.start, completed.transitionStart) : -1;
+    long long transitionWallUs = completed.transitionStarted &&
+            completed.transitionEnded
+        ? QpcElapsedUs(completed.transitionStart, completed.transitionEnd) : -1;
+    long long postDrainUs = completed.transitionEnded
+        ? QpcElapsedUs(completed.transitionEnd, end) : -1;
+    long long frozenPreUs = completed.transitionStarted &&
+            completed.lastPresentBeforeTransitionSeen
+        ? QpcElapsedUs(completed.lastPresentBeforeTransition, completed.transitionStart)
+        : -1;
+    long long lsSpanUs = g_lsFirstCallSinceLoad.QuadPart != 0
+        ? QpcElapsedUs(g_lsFirstCallSinceLoad, end) : -1;
+    long long gslcSpanUs = g_gslc.firstCall.QuadPart != 0
+        ? QpcElapsedUs(g_gslc.firstCall, g_gslc.lastCall) : -1;
+    Log("PerceivedLoadWallTime: " + std::to_string(wallUs) +
+        " us run_id=" + std::to_string(g_profilerRunId) +
+        " id=" + std::to_string(completed.id) +
+        " start_source=" + completed.startSource +
+        " end_reason=" + endReason +
+        " pre_activation_us=" + std::to_string(preActivationUs) +
+        " transition_wall_us=" + std::to_string(transitionWallUs) +
+        " post_drain_us=" + std::to_string(postDrainUs) +
+        " frozen_pre_us=" + std::to_string(frozenPreUs) +
+        " post_gap1_us=" + std::to_string(completed.postGap1Us) +
+        " post_gap2_us=" + std::to_string(completed.postGap2Us) +
+        " post_gap3_us=" + std::to_string(completed.postGap3Us) +
+        " loading_presents=" + std::to_string(completed.loadingPresents) +
+        " post_drain_presents=" + std::to_string(completed.postDrainPresents) +
+        " ls_calls=" + std::to_string(g_lsCallsSinceLoad) +
+        " ls_busy_us=" + std::to_string(g_lsBusyUsSinceLoad) +
+        " ls_span_us=" + std::to_string(lsSpanUs) +
+        " gslc_calls=" + std::to_string(g_gslc.calls) +
+        " gslc_busy_us=" + std::to_string(g_gslc.totalUs) +
+        " gslc_span_us=" + std::to_string(gslcSpanUs) +
+        " gslc_max_us=" + std::to_string(g_gslc.maxUs) +
+        " gslc_s1_us=" + std::to_string(g_gslc.stageUs[1]) +
+        " gslc_s4_us=" + std::to_string(g_gslc.stageUs[4]) +
+        " gslc_s5_us=" + std::to_string(g_gslc.stageUs[5]) +
+        " gslc_s1_n=" + std::to_string(g_gslc.stageCalls[1]) +
+        " gslc_s4_n=" + std::to_string(g_gslc.stageCalls[4]) +
+        " gslc_s5_n=" + std::to_string(g_gslc.stageCalls[5]) +
+        " loadgame_calls=" + std::to_string(
+            InterlockedCompareExchange64(&g_hookCalls_LoadGame, 0, 0)) +
+        " save_request_calls=" + std::to_string(
+            InterlockedCompareExchange64(&g_hookCalls_SaveLoadRequest, 0, 0)));
+    g_lsCallsSinceLoad = 0;
+    g_lsBusyUsSinceLoad = 0;
+    g_lsFirstCallSinceLoad = {};
+    g_gslc = {};
+
+    // Top P-packet majors of this load window by busy time: names come from
+    // the PPacketHandler switch (0x03 Module, 0x05 GameObjUpdate, 0x2D SaveLoad, ...).
+    int top[3] = {-1, -1, -1};
+    for (int pass = 0; pass < 3; ++pass) {
+        long long best = -1;
+        int bestIdx = -1;
+        for (int i = 0; i < 256; ++i) {
+            if (g_ppMajorUs[i] > best) {
+                bool already = false;
+                for (int j = 0; j < pass; ++j) {
+                    already = already || top[j] == i;
+                }
+                if (!already) {
+                    best = g_ppMajorUs[i];
+                    bestIdx = i;
+                }
+            }
+        }
+        top[pass] = bestIdx;
+    }
+    Log("PacketProfile: run_id=" + std::to_string(g_profilerRunId) +
+        " id=" + std::to_string(completed.id) +
+        " prq_busy_us=" + std::to_string(g_prqBusyUsSinceLoad) +
+        " prq_calls=" + std::to_string(g_prqCallsSinceLoad) +
+        " pp_busy_us=" + std::to_string(g_ppBusyUsSinceLoad) +
+        " pp_calls=" + std::to_string(g_ppCallsSinceLoad) +
+        " sp_busy_us=" + std::to_string(g_spBusyUsSinceLoad) +
+        " sp_calls=" + std::to_string(g_spCallsSinceLoad) +
+        " top1=0x" + ToHexByte(top[0]) + "/" + std::to_string(top[0] >= 0 ? g_ppMajorUs[top[0]] : 0) +
+        "us/" + std::to_string(top[0] >= 0 ? g_ppMajorCalls[top[0]] : 0) + "n" +
+        " top2=0x" + ToHexByte(top[1]) + "/" + std::to_string(top[1] >= 0 ? g_ppMajorUs[top[1]] : 0) +
+        "us/" + std::to_string(top[1] >= 0 ? g_ppMajorCalls[top[1]] : 0) + "n" +
+        " top3=0x" + ToHexByte(top[2]) + "/" + std::to_string(top[2] >= 0 ? g_ppMajorUs[top[2]] : 0) +
+        "us/" + std::to_string(top[2] >= 0 ? g_ppMajorCalls[top[2]] : 0) + "n" +
+        " fade_busy_us=" + std::to_string(g_fadeBusyUsSinceLoad) +
+        " fade_calls=" + std::to_string(g_fadeCallsSinceLoad) +
+        " fade_clamps=" + std::to_string(g_fadeClampsSinceLoad) +
+        " igc_busy_us=" + std::to_string(g_igcBusyUsSinceLoad) +
+        " igc_calls=" + std::to_string(g_igcCallsSinceLoad) +
+        " isc_busy_us=" + std::to_string(g_iscBusyUsSinceLoad) +
+        " isc_calls=" + std::to_string(g_iscCallsSinceLoad) +
+        " lfopen_busy_us=" + std::to_string(g_lfOpenBusyUsSinceLoad) +
+        " lfread_busy_us=" + std::to_string(g_lfReadBusyUsSinceLoad) +
+        " lfread_calls=" + std::to_string(g_lfReadCallsSinceLoad) +
+        " lfread_bytes=" + std::to_string(g_lfReadBytesSinceLoad));
+    g_prqCallsSinceLoad = 0;
+    g_prqBusyUsSinceLoad = 0;
+    g_ppCallsSinceLoad = 0;
+    g_ppBusyUsSinceLoad = 0;
+    g_spCallsSinceLoad = 0;
+    g_spBusyUsSinceLoad = 0;
+    for (int i = 0; i < 256; ++i) {
+        g_ppMajorCalls[i] = 0;
+        g_ppMajorUs[i] = 0;
+    }
+    g_fadeCallsSinceLoad = 0;
+    g_fadeBusyUsSinceLoad = 0;
+    g_fadeClampsSinceLoad = 0;
+    g_igcCallsSinceLoad = 0;
+    g_igcBusyUsSinceLoad = 0;
+    g_iscCallsSinceLoad = 0;
+    g_iscBusyUsSinceLoad = 0;
+    g_lfOpenCallsSinceLoad = 0;
+    g_lfOpenBusyUsSinceLoad = 0;
+    g_lfReadCallsSinceLoad = 0;
+    g_lfReadBusyUsSinceLoad = 0;
+    g_lfReadBytesSinceLoad = 0;
+}
+
+// Emit and disarm the click-to-control tracker.  Phase names match the
+// frame-captured anatomy: click->transition_start is the loading-screen
+// pre-activation drain, transition_start->first_present is the measured
+// transition window, first_present->control is the black window.
+static void FinishClickToControl(
+    LARGE_INTEGER end, const char* controlReason, int substate) {
+    ClickToControlProfile completed = g_clickToControl;
+    g_clickToControl = {};
+    if (!completed.armed) {
+        return;
+    }
+    long long wallUs = QpcElapsedUs(completed.click, end);
+    long long clickToTransitionUs = completed.transitionStartSeen
+        ? QpcElapsedUs(completed.click, completed.transitionStart) : -1;
+    long long transitionToFirstPresentUs =
+        completed.transitionStartSeen && completed.firstPresentSeen
+            ? QpcElapsedUs(completed.transitionStart, completed.firstPresent)
+            : -1;
+    long long firstPresentToControlUs = completed.firstPresentSeen
+        ? QpcElapsedUs(completed.firstPresent, end) : -1;
+    Log("ClickToControl: " + std::to_string(wallUs) +
+        " us run_id=" + std::to_string(g_profilerRunId) +
+        " id=" + std::to_string(completed.id) +
+        " click_source=" + completed.clickSource +
+        " control_reason=" + std::string(controlReason) +
+        " control_substate=" + std::to_string(substate) +
+        " click_to_transition_us=" + std::to_string(clickToTransitionUs) +
+        " transition_to_first_present_us=" +
+        std::to_string(transitionToFirstPresentUs) +
+        " first_present_to_control_us=" +
+        std::to_string(firstPresentToControlUs));
+}
+
+typedef BOOL (WINAPI* SwapBuffersPtr_t)(HDC);
+SwapBuffersPtr_t g_originalSwapBuffers = nullptr;
+
+BOOL WINAPI Hook_SwapBuffers(HDC hdc) {
+    InterlockedIncrement64(&g_hookCalls_SwapBuffers);
+    LARGE_INTEGER now = {};
+    QueryPerformanceCounter(&now);
+#if ENABLE_VISUAL_LOAD_TIMELINE
+    // Sample the back buffer BEFORE the flip: these pixels are the frame the
+    // player is about to see, which is what the hand-timed video measures.
+    RecordVisualFrame(hdc, now);
+#endif
+    BOOL result = g_originalSwapBuffers(hdc);
+    g_lastPresentQpc = now;
+    if (g_perceivedLoad.active &&
+        g_perceivedLoad.ownerThreadId == GetCurrentThreadId()) {
+        if (!g_perceivedLoad.transitionEnded) {
+            ++g_perceivedLoad.loadingPresents;
+            // A cancelled load (or a save-only LoadGame call) never activates a
+            // transition; expire the window instead of waiting forever.
+            if (!g_perceivedLoad.transitionStarted &&
+                QpcElapsedUs(g_perceivedLoad.start, now) > 20000000LL) {
+                FinishPerceivedLoad(now, "expired_no_transition");
+            } else if (QpcElapsedUs(g_perceivedLoad.start, now) > 60000000LL) {
+                FinishPerceivedLoad(now, "expired_overall");
+            }
+        } else {
+            ++g_perceivedLoad.postDrainPresents;
+            if (!g_clickToControl.firstPresentSeen) {
+                g_clickToControl.firstPresentSeen = true;
+                g_clickToControl.firstPresent = now;
+            }
+            // Capture the first post-drain inter-frame gaps: a long gap after
+            // the first gameplay frame means the engine stalls (fade, texture
+            // uploads) while the player is still looking at a static screen.
+            if (g_perceivedLoad.lastPostDrainPresent.QuadPart != 0) {
+                long long gapUs =
+                    QpcElapsedUs(g_perceivedLoad.lastPostDrainPresent, now);
+                if (g_perceivedLoad.postGap1Us < 0) {
+                    g_perceivedLoad.postGap1Us = gapUs;
+                } else if (g_perceivedLoad.postGap2Us < 0) {
+                    g_perceivedLoad.postGap2Us = gapUs;
+                } else if (g_perceivedLoad.postGap3Us < 0) {
+                    g_perceivedLoad.postGap3Us = gapUs;
+                }
+            }
+            g_perceivedLoad.lastPostDrainPresent = now;
+            EngineLoadStateSnapshot state = {};
+            // First presented frame after the drain with the load state cleared
+            // is the first frame the player would call gameplay.
+            if (!TryReadEngineLoadState(state) || state.state == 0) {
+                FinishPerceivedLoad(now, "first_gameplay_present");
+            }
+        }
+    }
+    return result;
+}
+
+typedef int (__thiscall* LoadGamePtr_t)(
+    void* thisPtr, uint32_t param1, uint32_t param2, uint32_t param3, uint32_t param4);
+LoadGamePtr_t g_originalLoadGame = nullptr;
+
+int __fastcall Hook_LoadGame(
+    void* thisPtr, void* edxDummy,
+    uint32_t param1, uint32_t param2, uint32_t param3, uint32_t param4) {
+    InterlockedIncrement64(&g_hookCalls_LoadGame);
+    LARGE_INTEGER start = {};
+    QueryPerformanceCounter(&start);
+    // Save-load entry behind the Load button; this is the moment the player
+    // starts waiting.  Actual save read/deserialization happens inside.
+    StartLoadPerceived("loadgame_entry", start);
+    return g_originalLoadGame(thisPtr, param1, param2, param3, param4);
+}
+
+// Server-side save/load request dispatcher (reached from the save/load packet
+// handler).  This is the earliest reliable "player asked for a load" marker:
+// the click reaches the server half as a command packet and is dispatched
+// here before the load context arms.  The original action-byte filter (2 /
+// 0x11) never matched on the SP save-load path — runs logged
+// start_source=state_activation despite save_request firing — so the window
+// now opens on ANY request and the action byte is shadow-logged to learn the
+// real load/save action values.  A newer request re-anchors an existing
+// not-yet-transitioning window (save click followed by load click).
+typedef void (__thiscall* SaveLoadRequestPtr_t)(void* thisPtr, int param1, char action);
+SaveLoadRequestPtr_t g_originalSaveLoadRequest = nullptr;
+
+void __fastcall Hook_SaveLoadRequest(
+    void* thisPtr, void* edxDummy, int param1, char action) {
+    InterlockedIncrement64(&g_hookCalls_SaveLoadRequest);
+    LARGE_INTEGER now = {};
+    QueryPerformanceCounter(&now);
+    Log("SaveLoadRequestAction: action=0x" + ToHexByte((unsigned char)action) +
+        " param1=" + std::to_string(param1));
+    if (g_perceivedLoad.active && !g_perceivedLoad.transitionStarted &&
+        g_perceivedLoad.ownerThreadId == GetCurrentThreadId()) {
+        // A fresher click supersedes an un-started window (e.g. the save-list
+        // click that preceded the Load click).
+        g_perceivedLoad.start = now;
+        g_clickToControl.click = now;
+        g_clickToControl.clickSource = "save_request_reanchor";
+    } else {
+        StartLoadPerceived("save_request", now);
+    }
+    g_originalSaveLoadRequest(thisPtr, param1, action);
+}
+
+// Save/load state-machine core: driven stage-by-stage through the packet
+// pipeline (NetPacketMajorDispatcher -> FUN_0065fef0 -> here), with every
+// stage gated on the packet queue being empty.  Stage 4 opens and
+// deserializes the save through the resource system; stage 5 finishes world
+// restore and enqueues the module load that starts the measured load state.
+// This is the engine work inside the pre-activation phase.
+typedef void (__thiscall* GameSaveLoadCorePtr_t)(
+    void* thisPtr, int param1, char stage, uint32_t p3, uint32_t p4, uint32_t p5);
+GameSaveLoadCorePtr_t g_originalGameSaveLoadCore = nullptr;
+
+void __fastcall Hook_GameSaveLoadCore(
+    void* thisPtr, void* edxDummy,
+    int param1, char stage, uint32_t p3, uint32_t p4, uint32_t p5) {
+    InterlockedIncrement64(&g_hookCalls_GameSaveLoadCore);
+    LARGE_INTEGER callStart = {};
+    QueryPerformanceCounter(&callStart);
+    if (g_gslc.firstCall.QuadPart == 0) {
+        g_gslc.firstCall = callStart;
+    }
+    g_originalGameSaveLoadCore(thisPtr, param1, stage, p3, p4, p5);
+    LARGE_INTEGER callEnd = {};
+    QueryPerformanceCounter(&callEnd);
+    int64_t durationUs = QpcElapsedUs(callStart, callEnd);
+    g_gslc.lastCall = callEnd;
+    ++g_gslc.calls;
+    g_gslc.totalUs += durationUs;
+    if (durationUs > g_gslc.maxUs) {
+        g_gslc.maxUs = durationUs;
+    }
+    unsigned int bucket = (unsigned char)stage;
+    if (bucket > 5) {
+        bucket = 6;
+    }
+    ++g_gslc.stageCalls[bucket];
+    g_gslc.stageUs[bucket] += durationUs;
+    // Slow stages are rare and are the interesting ones (save read,
+    // deserialization); log them individually.
+    if (durationUs > 50000) {
+        Log("GameSaveLoadCoreSlow: stage=" + std::to_string((int)(unsigned char)stage) +
+            " " + std::to_string(durationUs) + " us");
+    }
+}
+
+// Save-list entry parser: the Load menu parses EVERY save file (GFF open,
+// ~20 field reads, portrait loads) each time the list is populated.  All of
+// that happens before load-state activation and is invisible to both the
+// transition window and the frozen-preload stamp, so it gets its own
+// aggregate timer.  GUI-thread only; batching avoids per-call log noise.
+typedef void (__thiscall* PopulateSaveGameEntryPtr_t)(void* thisPtr, int* saveName);
+PopulateSaveGameEntryPtr_t g_originalPopulateSaveGameEntry = nullptr;
+struct SaveListParseBatch {
+    uint32_t calls;
+    int64_t totalUs;
+    int64_t maxUs;
+};
+static SaveListParseBatch g_saveListParseBatch = {};
+
+void __fastcall Hook_PopulateSaveGameEntry(
+    void* thisPtr, void* edxDummy, int* saveName) {
+    InterlockedIncrement64(&g_hookCalls_PopulateSave);
+    auto start = std::chrono::high_resolution_clock::now();
+    g_originalPopulateSaveGameEntry(thisPtr, saveName);
+    auto end = std::chrono::high_resolution_clock::now();
+    int64_t duration =
+        std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    g_saveListParseBatch.totalUs += duration;
+    if (duration > g_saveListParseBatch.maxUs) {
+        g_saveListParseBatch.maxUs = duration;
+    }
+    if (++g_saveListParseBatch.calls >= 16) {
+        Log("SaveListParse: " + std::to_string(g_saveListParseBatch.totalUs) +
+            " us count=" + std::to_string(g_saveListParseBatch.calls) +
+            " max_single=" + std::to_string(g_saveListParseBatch.maxUs));
+        g_saveListParseBatch = {};
+    }
+}
+
+static void StartLoadTransition(
+    const EngineLoadStateSnapshot* state, LARGE_INTEGER start,
+    const char* startReason) {
+    if (g_loadTransition.active) {
+        return;
+    }
+    g_loadTransition = {};
+    g_loadTransition.active = true;
+    g_loadTransition.ownerThreadId = GetCurrentThreadId();
+    g_loadTransition.id = ++g_nextLoadTransitionId;
+    g_loadTransition.startReason = startReason;
+    g_loadTransition.start = start;
+    if (state != nullptr) {
+        g_loadTransition.startState = *state;
+        if (state->state != 0) {
+            g_loadTransition.stateActivationSeen = true;
+            g_loadTransition.stateActivated = start;
+        }
+    }
+    g_finishTransitionAtOutermostReturn = false;
+    if (g_perceivedLoad.active) {
+        if (g_perceivedLoad.ownerThreadId == GetCurrentThreadId()) {
+            g_perceivedLoad.transitionStarted = true;
+            g_perceivedLoad.transitionStart = start;
+            g_perceivedLoad.lastPresentBeforeTransitionSeen =
+                g_lastPresentQpc.QuadPart != 0;
+            g_perceivedLoad.lastPresentBeforeTransition = g_lastPresentQpc;
+            g_clickToControl.transitionStartSeen = true;
+            g_clickToControl.transitionStart = start;
+        }
+    } else {
+        // Door/module transitions have no LoadGame entry; anchor the perceived
+        // window at state activation instead.
+        StartLoadPerceived("state_activation", start);
+        g_perceivedLoad.transitionStarted = true;
+        g_perceivedLoad.transitionStart = start;
+        g_perceivedLoad.lastPresentBeforeTransitionSeen =
+            g_lastPresentQpc.QuadPart != 0;
+        g_perceivedLoad.lastPresentBeforeTransition = g_lastPresentQpc;
+        g_clickToControl.transitionStartSeen = true;
+        g_clickToControl.transitionStart = start;
+    }
+}
+
+static void ObserveTransitionState(
+    const EngineLoadStateSnapshot& state, LARGE_INTEGER now) {
+    if (!g_loadTransition.active ||
+        g_loadTransition.ownerThreadId != GetCurrentThreadId()) {
+        return;
+    }
+    if (state.state != 0 && !g_loadTransition.stateActivationSeen) {
+        g_loadTransition.stateActivationSeen = true;
+        g_loadTransition.stateActivated = now;
+    } else if (state.state == 0 && g_loadTransition.stateActivationSeen &&
+               !g_loadTransition.coordinatorClearSeen) {
+        g_loadTransition.coordinatorClearSeen = true;
+        g_loadTransition.coordinatorCleared = now;
+    }
+}
+
+static void MaybeStartTransitionFromCoordinator(
+    int manager, LARGE_INTEGER now, const char* pendingReason,
+    const char* stateFallbackReason) {
+    if (g_loadTransition.active) {
+        return;
+    }
+    EngineLoadStateSnapshot state = {};
+    bool haveState = TryReadEngineLoadState(state);
+    LoadCoordinatorSnapshot coordinator = {};
+    bool haveCoordinator = TryReadLoadCoordinator(manager, coordinator);
+    if (haveCoordinator && coordinator.preparationPending == 1) {
+        StartLoadTransition(haveState ? &state : nullptr, now, pendingReason);
+    } else if (haveState && state.state != 0) {
+        StartLoadTransition(&state, now, stateFallbackReason);
+    }
+}
+
+static void FinishLoadTransition(
+    const EngineLoadStateSnapshot* state, LARGE_INTEGER end,
+    const char* endReason) {
+    if (!g_loadTransition.active ||
+        g_loadTransition.ownerThreadId != GetCurrentThreadId()) {
+        return;
+    }
+    if (state != nullptr) {
+        ObserveTransitionState(*state, end);
+    }
+    LoadTransitionProfile completed = g_loadTransition;
+    g_loadTransition.active = false;
+    g_finishTransitionAtOutermostReturn = false;
+    if (g_perceivedLoad.active &&
+        g_perceivedLoad.ownerThreadId == GetCurrentThreadId()) {
+        g_perceivedLoad.transitionEnded = true;
+        g_perceivedLoad.transitionEnd = end;
+    }
+
+    long long wallUs = QpcElapsedUs(completed.start, end);
+    long long stateActivatedUs = completed.stateActivationSeen
+        ? QpcElapsedUs(completed.start, completed.stateActivated) : -1;
+    long long coordinatorClearUs = completed.coordinatorClearSeen
+        ? QpcElapsedUs(completed.start, completed.coordinatorCleared) : -1;
+    long long finalDrainStartUs = completed.finalDrainSeen
+        ? QpcElapsedUs(completed.start, completed.finalDrainStarted) : -1;
+    long long visibleScreenUs = completed.presentedFrameSeen
+        ? QpcElapsedUs(completed.firstPresentedFrame,
+                       completed.lastPresentedFrameEnd) : -1;
+    long long firstFrameDelayUs = completed.presentedFrameSeen
+        ? QpcElapsedUs(completed.start, completed.firstPresentedFrame) : -1;
+    long long postFrameUs = completed.presentedFrameSeen &&
+            end.QuadPart >= completed.lastPresentedFrameEnd.QuadPart
+        ? QpcElapsedUs(completed.lastPresentedFrameEnd, end) : -1;
+
+    bool frameOrderValid = !completed.presentedFrameSeen ||
+        (completed.firstPresentedFrame.QuadPart >= completed.start.QuadPart &&
+         completed.lastPresentedFrameEnd.QuadPart >= completed.firstPresentedFrame.QuadPart &&
+         completed.lastPresentedFrameEnd.QuadPart <= end.QuadPart);
+    bool moduleOrderValid = !completed.moduleWindowSeen ||
+        (completed.firstModuleStart.QuadPart >= completed.start.QuadPart &&
+         completed.lastModuleEnd.QuadPart <= end.QuadPart);
+    bool archiveOrderValid = !completed.archiveWindowSeen ||
+        (completed.firstArchiveStart.QuadPart >= completed.start.QuadPart &&
+         completed.lastArchiveEnd.QuadPart <= end.QuadPart);
+    bool valid = completed.finalDrainSeen && completed.presentedFrameSeen &&
+        frameOrderValid && moduleOrderValid && archiveOrderValid &&
+        wallUs >= completed.moduleChunkMaxCallUs;
+
+    EngineLoadStateSnapshot endState = {};
+    if (state != nullptr) {
+        endState = *state;
+    }
+    Log("LoadTransitionWallTime: " + std::to_string(wallUs) +
+        " us run_id=" + std::to_string(g_profilerRunId) +
+        " id=" + std::to_string(completed.id) +
+        " valid=" + std::to_string(valid ? 1 : 0) +
+        " start_reason=" + completed.startReason +
+        " end_reason=" + endReason +
+        " start_state=" + std::to_string(completed.startState.state) +
+        " start_mode=" + std::to_string(completed.startState.mode) +
+        " current_index=" + std::to_string(completed.startState.currentIndex) +
+        " target_or_count=" + std::to_string(completed.startState.targetOrCount) +
+        " end_state=" + std::to_string(endState.state) +
+        " end_mode=" + std::to_string(endState.mode) +
+        " state_activated_us=" + std::to_string(stateActivatedUs) +
+        " coordinator_clear_us=" + std::to_string(coordinatorClearUs) +
+        " final_drain_start_us=" + std::to_string(finalDrainStartUs) +
+        " visible_screen_us=" + std::to_string(visibleScreenUs) +
+        " first_frame_delay_us=" + std::to_string(firstFrameDelayUs) +
+        " post_frame_us=" + std::to_string(postFrameUs) +
+        " presented_frame_calls=" + std::to_string(completed.presentedFrameCalls) +
+        " engine_us=" + std::to_string(completed.engineUs) +
+        " engine_calls=" + std::to_string(completed.engineCalls) +
+        " outer_loadingscreen_us=" + std::to_string(completed.outerLoadingScreenUs) +
+        " outer_calls=" + std::to_string(completed.outerLoadingScreenCalls) +
+        " module_chunk_us=" + std::to_string(completed.moduleChunkUs) +
+        " module_calls=" + std::to_string(completed.moduleChunkCalls) +
+        " module_max_call_us=" + std::to_string(completed.moduleChunkMaxCallUs) +
+        " loading_frame_us=" + std::to_string(completed.loadingFrameUs) +
+        " frame_calls=" + std::to_string(completed.loadingFrameCalls) +
+        " archive_us=" + std::to_string(completed.archiveUs) +
+        " archive_calls=" + std::to_string(completed.archiveCalls) +
+        " worker_submit_wait_us=" + std::to_string(completed.workerSubmitWaitUs) +
+        " worker_submit_calls=" + std::to_string(completed.workerSubmitCalls) +
+        " queue_drain_us=" + std::to_string(completed.resourceQueueDrainUs) +
+        " queue_drain_calls=" + std::to_string(completed.resourceQueueDrainCalls));
+}
+
+static void RecordTransitionDuration(
+    long long* totalUs, unsigned int* calls, long long durationUs) {
+    if (g_loadTransition.active &&
+        g_loadTransition.ownerThreadId == GetCurrentThreadId()) {
+        *totalUs += durationUs;
+        ++*calls;
+    }
+}
+
 typedef int (__thiscall* LoadAndInitializePtr_t)(void* thisPtr, uint32_t param1, int param2);
 LoadAndInitializePtr_t g_originalLoadAndInitializePtr = nullptr;
 
@@ -89,19 +1449,166 @@ int __fastcall Hook_LoadAndInitializePtr(
     return result;
 }
 
+typedef uint32_t (__thiscall* EnginePtr_t)(void* thisPtr);
+EnginePtr_t g_originalEngine = nullptr;
+
+uint32_t __fastcall Hook_Engine(void* thisPtr, void* edxDummy) {
+    InterlockedIncrement64(&g_hookCalls_Engine);
+    LARGE_INTEGER callStart = {};
+    QueryPerformanceCounter(&callStart);
+    const bool activeAtCallStart = g_loadTransition.active;
+
+    EngineLoadStateSnapshot before = {};
+    bool haveBefore = TryReadEngineLoadState(before);
+    if (haveBefore && g_loadTransition.active) {
+        ObserveTransitionState(before, callStart);
+    }
+
+    uint32_t result = g_originalEngine(thisPtr);
+
+    LARGE_INTEGER callEnd = {};
+    QueryPerformanceCounter(&callEnd);
+    EngineLoadStateSnapshot after = {};
+    bool haveAfter = TryReadEngineLoadState(after);
+    if (haveAfter && !g_loadTransition.active && after.state != 0) {
+        // Last-resort coverage for direct/network loads that bypass the normal
+        // coordinator preparation flag. Do not charge the completed Engine tick.
+        StartLoadTransition(&after, callEnd, "engine_state_fallback");
+    }
+    if (activeAtCallStart && g_loadTransition.active &&
+        g_loadTransition.ownerThreadId == GetCurrentThreadId()) {
+        RecordTransitionDuration(
+            &g_loadTransition.engineUs, &g_loadTransition.engineCalls,
+            QpcElapsedUs(callStart, callEnd));
+    }
+    if (haveAfter && g_loadTransition.active) {
+        // Coordinator clear is only a phase marker. Queued client packets,
+        // ModuleChunkLoadCore and final object stabilization can follow it.
+        ObserveTransitionState(after, callEnd);
+    }
+
+    // Click-to-control tracking: shadow-log the load-context substate and
+    // the client busy flag from the click onward, and once the first
+    // post-drain frame has been presented (the frame the video session
+    // proved is black), treat the first tick where the client busy flag
+    // (client+0x90, the gate that early-outs UpdatePlayerInputAndTargeting)
+    // clears as the moment the player regains control.
+    if (g_clickToControl.armed &&
+        GetCurrentThreadId() == g_perceivedLoad.ownerThreadId) {
+        int gateValue = haveAfter ? after.clientBusy : -1;
+        if (gateValue > 0) {
+            g_clickToControl.gateSeenBusy = true;
+        }
+        if (!g_clickToControl.lastSubstateValid ||
+            after.substate != g_clickToControl.lastSubstate ||
+            gateValue != g_clickToControl.lastGateValue) {
+            g_clickToControl.lastSubstateValid = true;
+            g_clickToControl.lastSubstate = after.substate;
+            g_clickToControl.lastGateValue = gateValue;
+            if (g_clickToControl.substateLogs < 32) {
+                ++g_clickToControl.substateLogs;
+                Log("LoadGate: substate=" + std::to_string(after.substate) +
+                    " client_busy=" + std::to_string(gateValue) +
+                    " at_us_after_click=" +
+                    std::to_string(QpcElapsedUs(g_clickToControl.click, callEnd)));
+            }
+        }
+        if (g_clickToControl.firstPresentSeen) {
+            if (gateValue == 0) {
+                FinishClickToControl(
+                    callEnd,
+                    g_clickToControl.gateSeenBusy ? "control_input_unblocked"
+                                                  : "gate_never_busy_anchor_invalid",
+                    after.substate);
+            } else if (QpcElapsedUs(g_clickToControl.firstPresent, callEnd) >
+                       120000000LL) {
+                // Never unblocked: do not spin on this window forever; the
+                // shadow lines above carry whatever the gate actually did.
+                FinishClickToControl(callEnd, "expired_no_control", after.substate);
+            }
+        } else if (QpcElapsedUs(g_clickToControl.click, callEnd) >
+                   30000000LL) {
+            // No transition/present followed the click (e.g. a save action or
+            // cancelled load): drop the window instead of holding a stale one.
+            FinishClickToControl(callEnd, "expired_no_present", after.substate);
+        }
+    }
+    return result;
+}
+
 // LoadingScreen
 typedef int (__fastcall* loadingscreenPtr_t)(int param1);
 loadingscreenPtr_t g_originalLoadingScreenPtr = nullptr;
 
 
 int __fastcall Hook_loadingscreenPtr(int param1) {
+    InterlockedIncrement64(&g_hookCalls_Loadingscreen);
+    LARGE_INTEGER transitionStart = {};
+    QueryPerformanceCounter(&transitionStart);
+    const bool outermost = (g_loadingscreenDepth++ == 0);
+
+    MaybeStartTransitionFromCoordinator(
+        param1, transitionStart,
+        outermost ? "coordinator_preparation" : "nested_coordinator_preparation",
+        "coordinator_state_fallback");
+
+    const bool activeAtEntry = g_loadTransition.active;
+    EngineLoadStateSnapshot before = {};
+    bool haveBefore = TryReadEngineLoadState(before);
+    if (haveBefore && g_loadTransition.active) {
+        ObserveTransitionState(before, transitionStart);
+    }
+
+    LoadCoordinatorSnapshot coordinator = {};
+    bool finalDrainGate = g_loadTransition.active &&
+        TryReadLoadCoordinator(param1, coordinator) &&
+        coordinator.preparationPending != 1 &&
+        haveBefore && before.state == 0 && coordinator.managerStatus == 2;
+    if (finalDrainGate) {
+        if (!g_loadTransition.finalDrainSeen) {
+            g_loadTransition.finalDrainSeen = true;
+            g_loadTransition.finalDrainStarted = transitionStart;
+        }
+        // This path runs FUN_0051D790, FUN_00537510 and the final object-list
+        // clear. Complete only when the containing outermost call returns.
+        g_finishTransitionAtOutermostReturn = true;
+    }
+
     auto start = std::chrono::high_resolution_clock::now();
 
     int result = g_originalLoadingScreenPtr(param1);
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    --g_loadingscreenDepth;
+    ++g_lsCallsSinceLoad;
+    g_lsBusyUsSinceLoad += duration.count();
+    if (g_lsFirstCallSinceLoad.QuadPart == 0) {
+        g_lsFirstCallSinceLoad = transitionStart;
+    }
+    LARGE_INTEGER transitionEnd = {};
+    QueryPerformanceCounter(&transitionEnd);
+    if (outermost) {
+        if (activeAtEntry && g_loadTransition.active) {
+            RecordTransitionDuration(
+                &g_loadTransition.outerLoadingScreenUs,
+                &g_loadTransition.outerLoadingScreenCalls,
+                QpcElapsedUs(transitionStart, transitionEnd));
+        }
+        EngineLoadStateSnapshot after = {};
+        bool haveAfter = TryReadEngineLoadState(after);
+        if (haveAfter && g_loadTransition.active) {
+            ObserveTransitionState(after, transitionEnd);
+        }
+        if (g_finishTransitionAtOutermostReturn && g_loadTransition.active) {
+            FinishLoadTransition(
+                haveAfter ? &after : nullptr, transitionEnd,
+                "final_drain_outer_return");
+        }
+    }
+#if LOG_HIGH_FREQUENCY_CALLS
     Log("loadingscreen: " + std::to_string(duration.count()) + " μs");
+#endif
 
     return result;
 }
@@ -184,8 +1691,76 @@ void __fastcall Hook_ProcessResourceQueue(int param1, void*, int param2){
 }
 
 
+void __fastcall Hook_ProcessResourceQueueTransition(int param1, void*, int param2) {
+    auto start = std::chrono::high_resolution_clock::now();
+    g_originalProcessResourceQueuePtr(param1, nullptr, param2);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    // Always-on accumulation: pre-activation load work is drained through
+    // these calls before the load state ever activates.
+    ++g_prqCallsSinceLoad;
+    g_prqBusyUsSinceLoad += duration.count();
+    if (param2 != 0) {
+        RecordTransitionDuration(
+            &g_loadTransition.resourceQueueDrainUs,
+            &g_loadTransition.resourceQueueDrainCalls,
+            duration.count());
+    }
+}
+
+// Packet handlers: P = major-dispatched client packets (module, game objects,
+// save/load...), S = server query packets.  Timing-only wrappers.
+// Convention verified from call sites and epilogues (RET 0x8, this in ECX):
+// both are __thiscall(this, packet, packetSize).
+typedef uint32_t (__thiscall* PacketHandlerPtr_t)(
+    void* thisPtr, char* packet, int packetSize);
+PacketHandlerPtr_t g_originalPPacketHandlerTiming = nullptr;
+PacketHandlerPtr_t g_originalSPacketHandlerTiming = nullptr;
+
+uint32_t __fastcall Hook_PPacketHandlerTiming(
+    void* thisPtr, void* edxDummy, char* packet, int packetSize) {
+    auto start = std::chrono::high_resolution_clock::now();
+    uint32_t result = g_originalPPacketHandlerTiming(thisPtr, packet, packetSize);
+    auto end = std::chrono::high_resolution_clock::now();
+    int64_t duration =
+        std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    ++g_ppCallsSinceLoad;
+    g_ppBusyUsSinceLoad += duration;
+    if (packet != nullptr) {
+        unsigned char major = (unsigned char)packet[1];
+        ++g_ppMajorCalls[major];
+        g_ppMajorUs[major] += duration;
+    }
+    return result;
+}
+
+uint32_t __fastcall Hook_SPacketHandlerTiming(
+    void* thisPtr, void* edxDummy, char* packet, int packetSize) {
+    auto start = std::chrono::high_resolution_clock::now();
+    uint32_t result = g_originalSPacketHandlerTiming(thisPtr, packet, packetSize);
+    auto end = std::chrono::high_resolution_clock::now();
+    ++g_spCallsSinceLoad;
+    g_spBusyUsSinceLoad +=
+        std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    return result;
+}
+
 typedef void (__fastcall* InitShadowCachePtr_t)(uint32_t param1);
 InitShadowCachePtr_t g_originalInitShadowCachePtr = nullptr;
+
+// InitGraphicsCache: per-tick texture/mesh pull scan during loading phases.
+// __thiscall(this) verified from prologue/epilogue (ECX stored, plain RET).
+typedef void (__thiscall* InitGraphicsCachePtr_t)(void* thisPtr);
+InitGraphicsCachePtr_t g_originalInitGraphicsCache = nullptr;
+
+void __fastcall Hook_InitGraphicsCache(void* thisPtr, void* edxDummy) {
+    auto start = std::chrono::high_resolution_clock::now();
+    g_originalInitGraphicsCache(thisPtr);
+    auto end = std::chrono::high_resolution_clock::now();
+    ++g_igcCallsSinceLoad;
+    g_igcBusyUsSinceLoad +=
+        std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+}
 
 void __fastcall Hook_InitShadowCache(uint32_t param1){
     auto start = std::chrono::high_resolution_clock::now();
@@ -193,8 +1768,9 @@ void __fastcall Hook_InitShadowCache(uint32_t param1){
     g_originalInitShadowCachePtr(param1);
 
     auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    Log("InitShadowCache: " + std::to_string(duration.count()) + " μs");
+    ++g_iscCallsSinceLoad;
+    g_iscBusyUsSinceLoad +=
+        std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 }
 
 typedef uint32_t* (__thiscall* LoadResourceBlockOrFallbackPtr_t)(
@@ -575,6 +2151,8 @@ static void GuiPreserve_RestoreAndSkip(int* state) {
 }
 
 uint32_t __fastcall Hook_ModuleChunkLoadCore(int param1, void* edx) {
+    LARGE_INTEGER transitionCallStart = {};
+    QueryPerformanceCounter(&transitionCallStart);
     auto start = std::chrono::high_resolution_clock::now();
 
     const bool outermostModuleChunkLoad = (g_moduleChunkLoadCoreDepth == 0);
@@ -626,7 +2204,24 @@ uint32_t __fastcall Hook_ModuleChunkLoadCore(int param1, void* edx) {
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    LARGE_INTEGER transitionCallEnd = {};
+    QueryPerformanceCounter(&transitionCallEnd);
     if (outermostModuleChunkLoad) {
+        if (g_loadTransition.active &&
+            g_loadTransition.ownerThreadId == GetCurrentThreadId()) {
+            if (!g_loadTransition.moduleWindowSeen) {
+                g_loadTransition.moduleWindowSeen = true;
+                g_loadTransition.firstModuleStart = transitionCallStart;
+            }
+            g_loadTransition.lastModuleEnd = transitionCallEnd;
+            if (duration.count() > g_loadTransition.moduleChunkMaxCallUs) {
+                g_loadTransition.moduleChunkMaxCallUs = duration.count();
+            }
+        }
+        RecordTransitionDuration(
+            &g_loadTransition.moduleChunkUs,
+            &g_loadTransition.moduleChunkCalls,
+            duration.count());
         Log("GUI_FindAndBindControlByTag: " +
             std::to_string(g_guiControlsLookupCache.guiFindTimeUs) +
             " us count=" + std::to_string(g_guiControlsLookupCache.guiFindCalls));
@@ -1153,6 +2748,15 @@ static volatile LONG g_loadingScreenThrottleLogged = 0;
 
 void __cdecl Hook_LoadingScreenUpdateFrame(
     float deltaTime, int runLoadingScreenWork, int suppressPresent) {
+    LARGE_INTEGER transitionCallStart = {};
+    QueryPerformanceCounter(&transitionCallStart);
+    int coordinatorManager = 0;
+    LoadCoordinatorSnapshot coordinator = {};
+    if (TryReadGlobalLoadCoordinator(coordinatorManager, coordinator)) {
+        MaybeStartTransitionFromCoordinator(
+            coordinatorManager, transitionCallStart,
+            "loading_frame_preparation", "loading_frame_state_fallback");
+    }
     auto start = std::chrono::high_resolution_clock::now();
 
     int effectiveSuppressPresent = suppressPresent;
@@ -1177,6 +2781,7 @@ void __cdecl Hook_LoadingScreenUpdateFrame(
     }
 #endif
 
+    bool executeFrame = true;
 #if SKIP_LOADING_SCREEN_UPDATE_FRAME_IN_MODULE_CHUNK_LOAD_CORE
     bool calledFromModuleChunkLoadCore = (g_moduleChunkLoadCoreDepth > 0);
     // Skipping LoadingScreenUpdateFrame when called from ModuleChunkLoadCore with param2 == 0, as this seems to be redundant.
@@ -1184,19 +2789,48 @@ void __cdecl Hook_LoadingScreenUpdateFrame(
 
     if (skipLoadingScreenUpdate) {
         Log("LoadingScreenUpdateFrame: skipped inside ModuleChunkLoadCore");
+        executeFrame = false;
     }
-    else{
+#endif
+
+    bool trackPresentedFrame = executeFrame && effectiveSuppressPresent == 0 &&
+        g_loadTransition.active &&
+        g_loadTransition.ownerThreadId == GetCurrentThreadId();
+    if (trackPresentedFrame) {
+        if (!g_loadTransition.presentedFrameSeen) {
+            g_loadTransition.presentedFrameSeen = true;
+            g_loadTransition.firstPresentedFrame = transitionCallStart;
+        }
+        ++g_loadTransition.presentedFrameCalls;
+    }
+    if (executeFrame) {
+#if ENABLE_VISUAL_LOAD_TIMELINE
+        // Any SwapBuffers the loading-screen renderer performs while we are
+        // inside this call presents the loading screen itself; the visual
+        // classifier uses this to tell "loading screen" from ordinary frames.
+        ++g_vlLoadingScreenFrameDepth;
+#endif
         g_originalLoadingScreenUpdateFrame(
             deltaTime, runLoadingScreenWork, effectiveSuppressPresent);
-    }
-#else
-    g_originalLoadingScreenUpdateFrame(
-        deltaTime, runLoadingScreenWork, effectiveSuppressPresent);
+#if ENABLE_VISUAL_LOAD_TIMELINE
+        --g_vlLoadingScreenFrameDepth;
 #endif
+    }
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    LARGE_INTEGER transitionCallEnd = {};
+    QueryPerformanceCounter(&transitionCallEnd);
+    if (trackPresentedFrame && g_loadTransition.active) {
+        g_loadTransition.lastPresentedFrameEnd = transitionCallEnd;
+    }
+    RecordTransitionDuration(
+        &g_loadTransition.loadingFrameUs,
+        &g_loadTransition.loadingFrameCalls,
+        duration.count());
+#if LOG_HIGH_FREQUENCY_CALLS
     Log("LoadingScreenUpdateFrame: " + std::to_string(duration.count()) + " μs");
+#endif
 }
 
 typedef uint32_t (__fastcall* AppState_GetGuiContextPtr_t)(void* thisPtr, void* edx);
@@ -1250,10 +2884,43 @@ typedef void (__fastcall* CSWGuiFade_SetTransitionStatePtr_t)(void* thisPtr, voi
 CSWGuiFade_SetTransitionStatePtr_t g_originalCSWGuiFade_SetTransitionState = nullptr;
 
 void __fastcall Hook_CSWGuiFade_SetTransitionState(void* thisPtr, void* edx, int mode, uint32_t progress, uint32_t duration, uint32_t* targetColor){
+    // duration arrives as the raw bits of a float in seconds (measured load
+    // fade: 0x3F800000 = 1.0f, once per load transition).
+    float durationSeconds = 0.0f;
+    static_assert(sizeof(durationSeconds) == sizeof(duration),
+        "fade duration bit-cast requires matching sizes");
+    std::memcpy(&durationSeconds, &duration, sizeof(durationSeconds));
+    if (durationSeconds >= 0.25f) {
+        Log("CSWGuiFadeLong: mode=" + std::to_string(mode) +
+            " duration_raw=" + std::to_string(duration) +
+            " seconds=" + std::to_string(durationSeconds));
+#if ENABLE_VISUAL_LOAD_TIMELINE
+        // Stamp the raw (pre-clamp) fade into the visual timeline: its offset
+        // from the visual phases shows whether a fade is gating the visible
+        // loading screen or the black window.
+        if (g_visualLoad.active) {
+            LARGE_INTEGER fadeNow = {};
+            QueryPerformanceCounter(&fadeNow);
+            g_visualLoad.fadeSeen = true;
+            g_visualLoad.fade = fadeNow;
+            g_visualLoad.fadeMode = mode;
+            g_visualLoad.fadeSeconds = durationSeconds;
+        }
+#endif
+#if CLAMP_LONG_FADES
+        // 0.001f rather than 0.0f: keeps any scale-by-duration math finite.
+        durationSeconds = 0.001f;
+        std::memcpy(&duration, &durationSeconds, sizeof(duration));
+        ++g_fadeClampsSinceLoad;
+        Log("FadeClamped: mode=" + std::to_string(mode) + " to 1ms");
+#endif
+    }
     auto start = std::chrono::high_resolution_clock::now();
     g_originalCSWGuiFade_SetTransitionState(thisPtr, edx, mode, progress, duration, targetColor);
     auto end = std::chrono::high_resolution_clock::now();
-    auto durationTime = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    ++g_fadeCallsSinceLoad;
+    g_fadeBusyUsSinceLoad +=
+        std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 }
 
 typedef void (__fastcall* LoadingScreenFadeUpdateFramePtr_t)(void* thisPtr, void* edx);
@@ -1691,6 +3358,23 @@ int __fastcall Hook_GFF_LookupFieldLabelByName(int gffPtr, void* edxDummy, int s
     return result;
 }
 
+typedef void (__thiscall* WorkerSubmitJobPtr_t)(
+    void* thisPtr, uint32_t resourceName, uint32_t jobType, uint32_t jobFlags);
+WorkerSubmitJobPtr_t g_originalWorkerSubmitJob = nullptr;
+
+void __fastcall Hook_WorkerSubmitJob(
+    void* thisPtr, void* edxDummy,
+    uint32_t resourceName, uint32_t jobType, uint32_t jobFlags) {
+    auto start = std::chrono::high_resolution_clock::now();
+    g_originalWorkerSubmitJob(thisPtr, resourceName, jobType, jobFlags);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    RecordTransitionDuration(
+        &g_loadTransition.workerSubmitWaitUs,
+        &g_loadTransition.workerSubmitCalls,
+        duration.count());
+}
+
 typedef uint32_t (__thiscall* ResourceEnsureLoadedPtr_t)(int thisPtr, int resourceEntry);
 ResourceEnsureLoadedPtr_t g_originalResourceEnsureLoaded = nullptr;
 
@@ -1970,6 +3654,8 @@ typedef int (__thiscall* ResourceLoadFromArchivePtr_t)(int thisPtr, int* resourc
 ResourceLoadFromArchivePtr_t g_originalResourceLoadFromArchive = nullptr;
 
 int __fastcall Hook_ResourceLoadFromArchive(int thisPtr, void* edxDummy, int* resourceEntry, int asyncFlag) {
+    LARGE_INTEGER transitionCallStart = {};
+    QueryPerformanceCounter(&transitionCallStart);
     auto start = std::chrono::high_resolution_clock::now();
 
     int result = 0;
@@ -2038,6 +3724,20 @@ int __fastcall Hook_ResourceLoadFromArchive(int thisPtr, void* edxDummy, int* re
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    LARGE_INTEGER transitionCallEnd = {};
+    QueryPerformanceCounter(&transitionCallEnd);
+    if (g_loadTransition.active &&
+        g_loadTransition.ownerThreadId == GetCurrentThreadId()) {
+        if (!g_loadTransition.archiveWindowSeen) {
+            g_loadTransition.archiveWindowSeen = true;
+            g_loadTransition.firstArchiveStart = transitionCallStart;
+        }
+        g_loadTransition.lastArchiveEnd = transitionCallEnd;
+    }
+    RecordTransitionDuration(
+        &g_loadTransition.archiveUs,
+        &g_loadTransition.archiveCalls,
+        duration.count());
     RecordArchiveLoadProfile(duration.count(), cacheHit);
     return result;
 }
@@ -2065,8 +3765,9 @@ uint32_t* __fastcall Hook_LooseFileOpen(uint32_t* thisPtr, void* edxDummy, uint3
     uint32_t* result = g_originalLooseFileOpen(thisPtr, param1, param2, param3);
 
     auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    Log("LooseFileOpen: " + std::to_string(duration.count()) + " μs");
+    ++g_lfOpenCallsSinceLoad;
+    g_lfOpenBusyUsSinceLoad +=
+        std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
     return result;
 }
 
@@ -2079,8 +3780,10 @@ int __fastcall Hook_LooseFileRead(int* thisPtr, void* edxDummy, void* buffer, si
     int result = g_originalLooseFileRead(thisPtr, buffer, elementSize, elementCount);
 
     auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    Log("LooseFileRead: " + std::to_string(duration.count()) + " μs");
+    ++g_lfReadCallsSinceLoad;
+    g_lfReadBusyUsSinceLoad +=
+        std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    g_lfReadBytesSinceLoad += (long long)elementSize * (long long)elementCount;
     return result;
 }
 
@@ -2529,6 +4232,42 @@ static bool IsSupportedSteamExecutable() {
     static const BYTE moduleChunkSignature[] = {
         0x55,0x8b,0xec,0x6a,0xff,0x68,0x84,0x99,0x96,0x00
     };
+    static const BYTE engineSignature[] = {
+        0x55,0x8b,0xec,0x6a,0xff,0x68,0x5b,0x58,0x96,0x00
+    };
+    static const BYTE loadGameSignature[] = {
+        0x55,0x8b,0xec,0x6a,0xff,0x68,0x8b,0x80,0x95,0x00
+    };
+    static const BYTE saveLoadRequestSignature[] = {
+        0x55,0x8b,0xec,0x83,0xec,0x4c,0xa1,0x20,0x1f,0xa1
+    };
+    static const BYTE populateSaveSignature[] = {
+        0x55,0x8b,0xec,0x6a,0xff,0x68,0x15,0x2a,0x97,0x00
+    };
+    static const BYTE gameSaveLoadCoreSignature[] = {
+        0x55,0x8b,0xec,0x6a,0xff,0x68,0x59,0x86,0x95,0x00
+    };
+    static const BYTE pPacketHandlerSignature[] = {
+        0x55,0x8b,0xec,0x6a,0xff,0x68,0xf0,0xcd,0x96,0x00
+    };
+    static const BYTE sPacketHandlerSignature[] = {
+        0x55,0x8b,0xec,0x6a,0xff,0x68,0x4b,0x4d,0x97,0x00
+    };
+    static const BYTE initGraphicsCacheSignature[] = {
+        0x55,0x8b,0xec,0x6a,0xff,0x68,0x2e,0xf1,0x94,0x00
+    };
+    static const BYTE initShadowCacheSignature[] = {
+        0x55,0x8b,0xec,0x83,0xec,0x20,0x89,0x4d,0xe0,0xa1
+    };
+    static const BYTE fadeSetStateSignature[] = {
+        0x55,0x8b,0xec,0x83,0xec,0x28,0x89,0x4d,0xf0,0x8b
+    };
+    static const BYTE looseFileOpenSignature[] = {
+        0x55,0x8b,0xec,0x6a,0xff,0x68,0x6b,0x1e,0x96,0x00
+    };
+    static const BYTE looseFileReadSignature[] = {
+        0x55,0x8b,0xec,0x83,0xec,0x0c,0x89,0x4d,0xf4,0x8b
+    };
     static const BYTE loadingFrameSignature[] = {
         0x55,0x8b,0xec,0x83,0xec,0x50
     };
@@ -2550,35 +4289,58 @@ static bool IsSupportedSteamExecutable() {
     static const BYTE allocateBufferSignature[] = {
         0x55,0x8b,0xec,0x83,0xec,0x10
     };
+    static const BYTE workerSubmitSignature[] = {
+        0x55,0x8b,0xec,0x51,0x89,0x4d,0xfc
+    };
+    static const BYTE processResourceQueueSignature[] = {
+        0x55,0x8b,0xec,0x83,0xec,0x0c,0x56
+    };
     static const BYTE sourceListBeginSignature[] = {
         0x55,0x8b,0xec,0x83,0xec,0x0c
     };
     static const BYTE sourceListAccessSignature[] = {
         0x55,0x8b,0xec,0x51,0x89,0x4d,0xfc
     };
-    if (!MatchesExecutableBytes(
-            0x007be4c0, moduleChunkSignature, sizeof(moduleChunkSignature)) ||
-        !MatchesExecutableBytes(
-            0x00409ed0, loadingFrameSignature, sizeof(loadingFrameSignature)) ||
-        !MatchesExecutableBytes(
-            0x00533830, loadScreenSignature, sizeof(loadScreenSignature)) ||
-        !MatchesExecutableBytes(
-            0x00418df0, guiFindSignature, sizeof(guiFindSignature)) ||
-        !MatchesExecutableBytes(
-            0x007178e0, gffLookupSignature, sizeof(gffLookupSignature)) ||
-        !MatchesExecutableBytes(
-            0x00713bf0, resourceLoadArchiveSignature, sizeof(resourceLoadArchiveSignature)) ||
-        !MatchesExecutableBytes(
-            0x00729370, encapsulatedReadSignature, sizeof(encapsulatedReadSignature)) ||
-        !MatchesExecutableBytes(
-            0x00712f30, allocateBufferSignature, sizeof(allocateBufferSignature)) ||
-        !MatchesExecutableBytes(
-            0x007a1720, sourceListBeginSignature, sizeof(sourceListBeginSignature)) ||
-        !MatchesExecutableBytes(
-            0x00561430, sourceListAccessSignature, sizeof(sourceListAccessSignature)) ||
-        !MatchesExecutableBytes(
-            0x0058c370, sourceListAccessSignature, sizeof(sourceListAccessSignature))) {
-        return false;
+    struct SignatureCheck {
+        const char* name;
+        DWORD address;
+        const BYTE* bytes;
+        size_t size;
+    };
+    const SignatureCheck checks[] = {
+        {"Engine", 0x00781be0, engineSignature, sizeof(engineSignature)},
+        {"LoadGame", 0x006310d0, loadGameSignature, sizeof(loadGameSignature)},
+        {"SaveLoadRequest", 0x0065f630, saveLoadRequestSignature, sizeof(saveLoadRequestSignature)},
+        {"PopulateSaveGameEntry", 0x00855f30, populateSaveSignature, sizeof(populateSaveSignature)},
+        {"GameSaveLoad_Core", 0x00638bd0, gameSaveLoadCoreSignature, sizeof(gameSaveLoadCoreSignature)},
+        {"PPacketHandler", 0x00810cf0, pPacketHandlerSignature, sizeof(pPacketHandlerSignature)},
+        {"SPacketHandler", 0x00884530, sPacketHandlerSignature, sizeof(sPacketHandlerSignature)},
+        {"InitGraphicsCache", 0x0053a0c0, initGraphicsCacheSignature, sizeof(initGraphicsCacheSignature)},
+        {"InitShadowCache", 0x0053a8b0, initShadowCacheSignature, sizeof(initShadowCacheSignature)},
+        {"CSWGuiFade_SetTransitionState", 0x007bc8f0, fadeSetStateSignature, sizeof(fadeSetStateSignature)},
+        {"LooseFileOpen", 0x0073da40, looseFileOpenSignature, sizeof(looseFileOpenSignature)},
+        {"LooseFileRead", 0x0073dd20, looseFileReadSignature, sizeof(looseFileReadSignature)},
+        {"ModuleChunkLoadCore", 0x007be4c0, moduleChunkSignature, sizeof(moduleChunkSignature)},
+        {"LoadingScreenUpdateFrame", 0x00409ed0, loadingFrameSignature, sizeof(loadingFrameSignature)},
+        {"LoadingScreen", 0x00533830, loadScreenSignature, sizeof(loadScreenSignature)},
+        {"GUI_FindAndBindControlByTag", 0x00418df0, guiFindSignature, sizeof(guiFindSignature)},
+        {"GFF_LookupFieldLabelByName", 0x007178e0, gffLookupSignature, sizeof(gffLookupSignature)},
+        {"ResourceLoadFromArchive", 0x00713bf0, resourceLoadArchiveSignature, sizeof(resourceLoadArchiveSignature)},
+        {"CExoEncapsulatedFile_ReadResourceSync", 0x00729370, encapsulatedReadSignature, sizeof(encapsulatedReadSignature)},
+        {"Resource_AllocateLoadBuffer", 0x00712f30, allocateBufferSignature, sizeof(allocateBufferSignature)},
+        {"Worker_SubmitJob", 0x00711600, workerSubmitSignature, sizeof(workerSubmitSignature)},
+        {"ProcessResourceQueue", 0x00703f30, processResourceQueueSignature, sizeof(processResourceQueueSignature)},
+        {"ArchiveSourceListBegin", 0x007a1720, sourceListBeginSignature, sizeof(sourceListBeginSignature)},
+        {"ArchiveSourceListGet", 0x00561430, sourceListAccessSignature, sizeof(sourceListAccessSignature)},
+        {"ArchiveSourceListNext", 0x0058c370, sourceListAccessSignature, sizeof(sourceListAccessSignature)},
+    };
+    for (const SignatureCheck& check : checks) {
+        if (!MatchesExecutableBytes(check.address, check.bytes, check.size)) {
+            // Name the failing check: an all-or-nothing gate that fails silently
+            // turns the whole mod (including the intro skip) off with no clue.
+            Log(std::string("Signature check failed: ") + check.name);
+            return false;
+        }
     }
 
 #if SKIP_PRELOAD_INITIAL_ASSETS_WRAPPER
@@ -2593,10 +4355,88 @@ static bool IsSupportedSteamExecutable() {
 }
 
 static void InstallPerformanceHooks() {
+    if (g_profilerRunId == 0) {
+        g_profilerRunId =
+            ((unsigned long long)GetCurrentProcessId() << 32) |
+            (unsigned long long)GetTickCount();
+    }
+    Log("ProfilerRunStart: run_id=" + std::to_string(g_profilerRunId) +
+        " pid=" + std::to_string(GetCurrentProcessId()) +
+        " scenario=" + kScenarioName +
+        " performance_hook_set_only=" + std::to_string(PERFORMANCE_HOOK_SET_ONLY) +
+        " preload_noop=" + std::to_string(SKIP_PRELOAD_INITIAL_ASSETS_WRAPPER) +
+        " archive_cache=" + std::to_string(ENABLE_ARCHIVE_RESOURCE_CACHE) +
+        " gui_cache=" + std::to_string(ENABLE_GUI_CONTROLS_LOOKUP_CACHE) +
+        " present_throttle=" + std::to_string(THROTTLE_LOADING_SCREEN_PRESENTS) +
+        " skip_debug_gui=" + std::to_string(SKIP_DEBUG_GUI_CONSTRUCTION) +
+        " defer_ingame_tabs=" + std::to_string(DEFER_INGAME_TAB_CONSTRUCTION) +
+        " clamp_long_fades=" + std::to_string(CLAMP_LONG_FADES));
 #if SKIP_PRELOAD_INITIAL_ASSETS_WRAPPER
     InstallCheckedHook(0x0073f050, (LPVOID)&Hook_PreloadInitialAssetsWrapper,
         (LPVOID*)&g_originalPreloadInitialAssetsWrapperPtr, "PreloadInitialAssetsWrapper");
 #endif
+
+    // Engine supplies phase observations only. Coordinator state clear is not a
+    // completion boundary because queued client/module work continues afterward.
+    InstallCheckedHook(0x00781be0, (LPVOID)&Hook_Engine,
+        (LPVOID*)&g_originalEngine, "EngineTransitionObserver");
+
+    // Save-load entry: anchors the true perceived window at the Load button.
+    InstallCheckedHook(0x006310d0, (LPVOID)&Hook_LoadGame,
+        (LPVOID*)&g_originalLoadGame, "LoadGame");
+
+    // Server-side save/load request dispatcher: fallback anchor closer to the
+    // button click on the real (packet-driven) save-load path.
+    InstallCheckedHook(0x0065f630, (LPVOID)&Hook_SaveLoadRequest,
+        (LPVOID*)&g_originalSaveLoadRequest, "SaveLoadRequest");
+
+    // Save-list population cost (per menu open, before any load starts).
+    InstallCheckedHook(0x00855f30, (LPVOID)&Hook_PopulateSaveGameEntry,
+        (LPVOID*)&g_originalPopulateSaveGameEntry, "PopulateSaveGameEntry");
+
+    // Load diagnostics (timing-only): fade pacing, per-tick cache scans,
+    // loose-file I/O — targets of the near-zero load plan.
+#define ENABLE_LOAD_DIAGNOSTIC_TIMING 1
+#if ENABLE_LOAD_DIAGNOSTIC_TIMING
+    InstallCheckedHook(0x0053a0c0, (LPVOID)&Hook_InitGraphicsCache,
+        (LPVOID*)&g_originalInitGraphicsCache, "InitGraphicsCacheTiming");
+    InstallCheckedHook(0x0053a8b0, (LPVOID)&Hook_InitShadowCache,
+        (LPVOID*)&g_originalInitShadowCachePtr, "InitShadowCacheTiming");
+    InstallCheckedHook(0x007bc8f0, (LPVOID)&Hook_CSWGuiFade_SetTransitionState,
+        (LPVOID*)&g_originalCSWGuiFade_SetTransitionState, "CSWGuiFadeTiming");
+    InstallCheckedHook(0x0073da40, (LPVOID)&Hook_LooseFileOpen,
+        (LPVOID*)&g_originalLooseFileOpen, "LooseFileOpenTiming");
+    InstallCheckedHook(0x0073dd20, (LPVOID)&Hook_LooseFileRead,
+        (LPVOID*)&g_originalLooseFileRead, "LooseFileReadTiming");
+#endif
+
+    // Save/load state-machine core: per-stage timing of the pre-activation
+    // save read/deserialization phase.
+    InstallCheckedHook(0x00638bd0, (LPVOID)&Hook_GameSaveLoadCore,
+        (LPVOID*)&g_originalGameSaveLoadCore, "GameSaveLoad_Core");
+
+    // Packet handlers: attribute pre-activation packet-drain work per family.
+    // DISABLED: crashing the game on load.  Convention must be verified from
+    // the handler epilogues (RET vs RET imm) before re-enabling; a wrong
+    // calling convention corrupts the stack on the first call.
+#define ENABLE_PACKET_HANDLER_TIMING 0
+#if ENABLE_PACKET_HANDLER_TIMING
+    InstallCheckedHook(0x00810cf0, (LPVOID)&Hook_PPacketHandlerTiming,
+        (LPVOID*)&g_originalPPacketHandlerTiming, "PPacketHandlerTiming");
+    InstallCheckedHook(0x00884530, (LPVOID)&Hook_SPacketHandlerTiming,
+        (LPVOID*)&g_originalSPacketHandlerTiming, "SPacketHandlerTiming");
+#endif
+
+    // Present tracker: closes the perceived window at the first gameplay frame.
+    HMODULE gdi32Module = GetModuleHandleA("gdi32.dll");
+    void* swapBuffersAddr = gdi32Module != nullptr
+        ? (void*)GetProcAddress(gdi32Module, "SwapBuffers") : nullptr;
+    if (swapBuffersAddr != nullptr) {
+        InstallCheckedHook((DWORD)swapBuffersAddr, (LPVOID)&Hook_SwapBuffers,
+            (LPVOID*)&g_originalSwapBuffers, "SwapBuffersPresentTracker");
+    } else {
+        Log("Failed to install SwapBuffers present tracker: gdi32 unavailable");
+    }
 
     // Read-only coordinator timing and scope tracking.  This detour does not alter
     // the CClientExoApp object graph or any engine ownership state.
@@ -2612,6 +4452,10 @@ static void InstallPerformanceHooks() {
     InstallCheckedHook(0x00729370, (LPVOID)&Hook_CExoEncapsulatedFile_ReadResourceSync,
         (LPVOID*)&g_originalCExoEncapsulatedFile_ReadResourceSync,
         "CExoEncapsulatedFile_ReadResourceSync");
+    InstallCheckedHook(0x00711600, (LPVOID)&Hook_WorkerSubmitJob,
+        (LPVOID*)&g_originalWorkerSubmitJob, "Worker_SubmitJob");
+    InstallCheckedHook(0x00703f30, (LPVOID)&Hook_ProcessResourceQueueTransition,
+        (LPVOID*)&g_originalProcessResourceQueuePtr, "ProcessResourceQueueTransition");
 #if ENABLE_ARCHIVE_RESOURCE_CACHE
     Log("Archive resource cache enabled; max_bytes=" +
         std::to_string((size_t)ARCHIVE_CACHE_MAX_BYTES));
@@ -3906,6 +5750,16 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
             break;
             
         case DLL_PROCESS_DETACH:
+            DumpProfilerHookCounts("detach");
+#if ENABLE_VISUAL_LOAD_TIMELINE
+            // A load still in its black window when the player quits would
+            // otherwise never emit; flush whatever the ring captured.
+            if (g_visualLoad.active) {
+                LARGE_INTEGER detachNow = {};
+                QueryPerformanceCounter(&detachNow);
+                EmitVisualLoad(detachNow, "detach");
+            }
+#endif
             MH_Uninitialize();
             if (g_logFile.is_open()) g_logFile.close();
             break;

@@ -80,4 +80,4 @@ All hooks installed in both runs.
 The `work` window only covered 43 ms in both runs. The LoadPhases window (and so the
 sampler and the texture counters) arms at state activation, ~0.8 s after the click, and
 neither `LoadGame` nor `SaveLoadRequest` fires on these reloads. `LP_SAMPLE_FROM_CLICK`
-(next commit) starts the sampler at the click instead.
+(same commit) starts the sampler at the click instead.

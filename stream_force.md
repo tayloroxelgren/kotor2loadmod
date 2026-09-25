@@ -50,6 +50,40 @@ On the 101PER quicksave reload, compared with the scenario-F numbers in `load_ph
 - Levels with more objects need more messages, so the saving should grow with level size.
   One reload of a large level (e.g. Nar Shaddaa) is worth logging.
 
-## Result
+## Result (2026-09-25, run_id 151561689651388, one load from the menu plus three reloads)
 
-Not run yet.
+`ProfilerRunStart` confirms `scenario=g_streamforce stream_force=1`. All hooks installed.
+
+| | Before (scenario F, `load_phases.md`) | Scenario G |
+|---|---|---|
+| `stream_us` (server running → area-loaded ack) | 1.90-1.91 s | 0.548-0.565 s |
+| `stream_msgs` / `stream_bytes` | 9 / 18,705 | 9 / 18,705-18,727 |
+| `stream_forced` | 0 | 10 (every stream tick) |
+| Gap between messages 2-8 | ~202 ms | 9-16 ms |
+| `area_to_onenter_us` | ~1 ms | ~1 ms |
+| Script delay / fade hold / fade | 2.00 / 1.0 / 1.0 s | 2.00 / 1.0 / 1.0 s (2.21 s on the first load, as before) |
+| Messages after the ack | 200 ms apart | 200 ms apart (`held_before` ~34), so gameplay is unaffected |
+
+The stream is 1.34 s shorter, about 70%. The prediction of 0.1-0.3 s missed: two stretches
+are not the throttle, and together they make up about 470 ms of the remaining 560 ms.
+
+- About 270 ms from server running to the first message, with only one tick in that time.
+  The tick was held, meaning the player was not yet updatable.
+- About 185-200 ms between message 0 and message 1 (both carry stage 7), with **no** server
+  ticks at all (`held_before=0`). The loading screen still presented ~16 frames in that time.
+
+With force on, every server tick sends. No ticks means the server loop (`loadingscreen`,
+0x00533830, the only caller of `Server_UpdateAllClients` besides `FUN_0089fbd0`) is not
+running. Something else holds the main thread while redrawing the loading screen, most
+likely the client processing the first large message (stage 7). The gap varies from 184 to
+200 ms, so it looks like work rather than a timer. The throttle used to hide it: it ran in
+parallel with the 200 ms waits.
+
+`work_us` here is 0.83-0.85 s per reload, against 9.4-11.4 s in the scenario F run, even
+though the bytes show the same area. The change cannot affect anything before finalize, so
+that difference comes from the other branch's build or the machine state, not this
+experiment. **The total `VisualLoad` numbers (4.43-4.46 s per reload) need a scenario A run
+from this branch before they can be compared.** Only the stream phase is compared above.
+
+Not yet checked: game state after reload (objects, party, first area transition) and a
+larger level.

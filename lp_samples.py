@@ -1,6 +1,9 @@
 """Group LoadPhaseSample stacks by stream gap (see stream_force.md).
 
 Usage: python lp_samples.py [kotor2_log.txt] [--top N] [--id ID] [--funcs FILE]
+                             [--summary] [--run-id RUN_ID]
+
+--run-id picks a run by its ProfilerRunStart run_id (default: the latest run).
 
 --funcs takes Ghidra's function list ("NAME at ADDR" per line, e.g. from the
 GhidraMCP bridge: curl http://127.0.0.1:8080/list_functions > functions.txt).
@@ -72,6 +75,11 @@ def main():
         only_id = args[i + 1]
         del args[i:i + 2]
     starts, names = [], []
+    run_id = None
+    if "--run-id" in args:
+        i = args.index("--run-id")
+        run_id = args[i + 1]
+        del args[i:i + 2]
     summary = "--summary" in args
     if summary:
         args.remove("--summary")
@@ -88,8 +96,14 @@ def main():
 
     path = args[0] if args else DEFAULT_LOG
     lines = open(path, encoding="utf-8", errors="replace").read().splitlines()
-    start = max((i for i, l in enumerate(lines) if "ProfilerRunStart:" in l), default=0)
-    lines = lines[start:]
+    starts_at = [i for i, l in enumerate(lines) if "ProfilerRunStart:" in l]
+    if run_id is None:
+        start = starts_at[-1] if starts_at else 0
+    else:
+        start = next(i for i in starts_at if f"run_id={run_id} " in lines[i])
+    end = next((i for i in starts_at if i > start), len(lines))
+    print(lines[start].split(" - ", 1)[-1][:200])
+    lines = lines[start:end]
 
     loads = {}
     for l in lines:

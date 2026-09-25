@@ -11,7 +11,7 @@ With it, addresses are labelled with their containing function and each window
 also gets a per-function inclusive ranking.
 
 For each load in the latest run, splits the main-thread samples into windows:
-  work        window armed (click) .. finalize enter
+  work        click (at_us 0) .. finalize enter; earlier samples are ignored
   handshake   finalize enter .. server running (state12_exit)
   gap1        server running .. first stream message
   gap2        first .. second stream message
@@ -136,7 +136,7 @@ def main():
         m0 = stream[0] if stream else run
         m1 = stream[1] if len(stream) > 1 else m0
         ack = ev.get("area_loaded", 10 ** 12)
-        windows = [("work", -10 ** 12, fin), ("handshake", fin, run), ("gap1", run, m0),
+        windows = [("work", 0, fin), ("handshake", fin, run), ("gap1", run, m0),
                    ("gap2", m0, m1), ("rest", m1, ack)]
         ts = [s[0] for s in ld["samples"]]
         interval = (ts[-1] - ts[0]) / max(len(ts) - 1, 1)  # us per sample

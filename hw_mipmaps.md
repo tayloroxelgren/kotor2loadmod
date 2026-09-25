@@ -52,6 +52,32 @@ Two DLLs from the same source. Restart the game between them and do the same fou
   same. Black, white or flickering textures would mean the GPU path is broken on this
   driver. Mip filtering may differ slightly (driver box filter vs GLU's).
 
-## Result
+## Result (2026-09-25, four 101PER loads each)
 
-Not run yet.
+Control run_id 134210024021392 (`hw_mipmaps=0`), fix run_id 123421066321418 (`hw_mipmaps=1`).
+All hooks installed in both runs.
+
+| Per load (mean of 4) | Off | On |
+|---|---|---|
+| `mip_checks` / `mip_forced` | 18 / 0 | 18 / 18 |
+| `Texture_UploadToGL` calls / time (all in the stream phase) | 28 / 147 ms | 28 / **0.9 ms** |
+| `gluBuild2DMipmaps` calls / time | 24 / 152 ms | 6 / 5 ms |
+| Sampled `cpu_mipmaps` in gap 1 | 147 ms | 0 |
+| Gap 1 (server running → first message) | 285 ms | **136 ms** |
+| `stream_us` | 562-610 ms (mean 578) | 417-452 ms (mean 434) |
+| `VisualLoad` total, reloads 2-4 | 4,442-4,465 ms (mean 4,455) | 4,324-4,368 ms (mean 4,344) |
+
+- The stream is 144 ms shorter. The prediction was ~120-145 ms, because I expected the GPU
+  path to cost 5-25 ms of main-thread time. It costs 0.9 ms for all 28 uploads: the driver
+  does the mip generation off the main thread.
+- The total is 111 ms shorter, not 144, because reload 2's `work_us` was 64 ms slower
+  (904 vs ~845 ms). That time comes before any texture upload, so it's noise; reloads 3-4
+  alone are 121 ms shorter.
+- The 6 remaining `gluBuild2DMipmaps` calls come from three callers that skip the check
+  (`FUN_00432fa0`, `FUN_00432ce0`, `FUN_00436250`) and cost ~5 ms. Not worth a hook.
+- Stream counts, bytes, script hold and fade are unchanged. Visual check: pending.
+
+The `work` window only covered 43 ms in both runs. The LoadPhases window (and so the
+sampler and the texture counters) arms at state activation, ~0.8 s after the click, and
+neither `LoadGame` nor `SaveLoadRequest` fires on these reloads. `LP_SAMPLE_FROM_CLICK`
+(next commit) starts the sampler at the click instead.

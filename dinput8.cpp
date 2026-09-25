@@ -697,6 +697,13 @@ static void ArmVisualLoad(unsigned int id, LARGE_INTEGER now);
 // addresses, and resumes it; nothing is allocated while it is suspended.
 // Addresses are resolved offline in Ghidra (lp_samples.py groups them).
 #define LP_SAMPLE_MAIN_THREAD 1
+// Diagnostic: also start sampling at every click/Enter/Space while no window
+// is open, and keep it only if a window arms within 2 s.  Reloads arm ~0.8 s
+// after the click (at state activation) and neither LoadGame nor
+// SaveLoadRequest fires on them, so this is the only way to see that first
+// 0.8 s.  Costs ~2% of the main thread for 2 s after every gameplay click, so
+// leave it off outside attribution runs.
+#define LP_SAMPLE_FROM_CLICK 1
 
 enum LpKind : unsigned char {
     LP_FINALIZE_ENTER = 0,  // ModuleLoad_FinalizeAndQueueReady 0x0055a650
@@ -826,6 +833,7 @@ static HANDLE g_lpSampleTarget = nullptr;
 static DWORD g_lpSampleTargetId = 0;
 static DWORD g_lpImageLo = 0, g_lpImageHi = 0;
 static long long g_lpSampleCostUs = 0;  // total time the main thread was held suspended
+static volatile LONGLONG g_lpPreArmDeadline = 0;  // QPC; 0 = not a click-started run
 
 static bool LpInImage(DWORD a) {
     return a >= g_lpImageLo && a < g_lpImageHi;
@@ -908,7 +916,7 @@ static void LpTakeSample() {
         return;
     }
     s.qpc = t0;
-    s.phase = (unsigned char)g_lp.phase;
+    s.phase = g_lp.active ? (unsigned char)g_lp.phase : 0;
     g_lpSampleCostUs += QpcElapsedUs(t0, t1);
     InterlockedExchange(&g_lpSampleCount, n + 1);
 }
@@ -922,6 +930,16 @@ static DWORD WINAPI LpSamplerProc(LPVOID) {
                 // Full (a window that never reached the ack): stop suspending.
                 InterlockedExchange(&g_lpSampling, 0);
                 break;
+            }
+            const LONGLONG deadline = g_lpPreArmDeadline;
+            if (deadline != 0 && !g_lp.active) {
+                LARGE_INTEGER now = {};
+                QueryPerformanceCounter(&now);
+                if (now.QuadPart > deadline) {
+                    // A click that did not start a load.
+                    InterlockedExchange(&g_lpSampling, 0);
+                    break;
+                }
             }
             LpTakeSample();
             Sleep(1);
@@ -974,6 +992,21 @@ static void LpSamplerStart() {
 static void LpSamplerStop() {
     InterlockedExchange(&g_lpSampling, 0);
 }
+
+#if LP_SAMPLE_FROM_CLICK
+// Main thread, from RecordVisualFrame, on each new click.  Samples taken
+// before the window arms are kept (LpSamplerStart is a no-op while running)
+// and come out with negative at_us when they precede the anchor click.
+static void LpSamplerOnClick(LARGE_INTEGER now) {
+    if (g_lp.active) {
+        return;
+    }
+    LARGE_INTEGER freq = {};
+    QueryPerformanceFrequency(&freq);
+    g_lpPreArmDeadline = now.QuadPart + 2 * freq.QuadPart;
+    LpSamplerStart();
+}
+#endif
 #endif  // LP_SAMPLE_MAIN_THREAD
 
 static void LpArm(unsigned int id) {
@@ -991,6 +1024,7 @@ static void LpArm(unsigned int id) {
     g_lp.ownerThreadId = GetCurrentThreadId();
     g_lp.id = id;
 #if LP_SAMPLE_MAIN_THREAD
+    g_lpPreArmDeadline = 0;  // a window is open now: sample until the ack
     LpSamplerStart();
 #endif
 }
@@ -1460,7 +1494,13 @@ static void ArmVisualLoad(unsigned int id, LARGE_INTEGER now) {
 // Called from Hook_SwapBuffers BEFORE the original SwapBuffers so the sampled
 // pixels are the frame about to be shown.
 static void RecordVisualFrame(HDC hdc, LARGE_INTEGER now) {
+    const unsigned int clicksBefore = g_vlClickWrite;
     PollInputForClicks(now);
+#if ENABLE_LOAD_PHASES_LOG && LP_SAMPLE_MAIN_THREAD && LP_SAMPLE_FROM_CLICK
+    if (g_vlClickWrite != clicksBefore) {
+        LpSamplerOnClick(now);
+    }
+#endif
     VisualFrameSample s = {};
     s.qpc = now;
     unsigned char maxLum = 0;

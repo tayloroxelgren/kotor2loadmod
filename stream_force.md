@@ -24,8 +24,10 @@ The existing LoadPhases tick hook now passes `force = 1` while `player+0x24 == 1
   earlier than the engine allows. It only stops waiting between messages.
 - The engine passes force = 1 itself from `FUN_0089fbd0`, so this path is already used.
 
-It rides on the LoadPhases tick hook because MinHook allows one detour per address.
-Building with the force on and `ENABLE_LOAD_PHASES_LOG 0` is a compile error.
+MinHook allows one detour per address, so the force lives in a shared helper
+(`StreamForceFlag`) that two detours call: the LoadPhases tick hook when logging is
+on, and a bare `Hook_UpdateClientForce` when `LOGGING_ENABLED=0`. The force works in
+both builds.
 
 ## Prediction (written before the first run)
 

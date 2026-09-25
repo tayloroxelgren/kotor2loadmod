@@ -76,8 +76,8 @@ throttle, fade clamp) are off by default and can be switched on with
 You need:
 
 - Windows, with Visual Studio 2022 (the "Desktop development with C++"
-  workload). `build_scenario.bat` expects `vcvars32.bat` in the default
-  Community install path, so edit that line if yours is elsewhere.
+  workload). `build.bat` expects `vcvars32.bat` in the default Community
+  install path, so edit that line if yours is elsewhere.
 - [MinHook](https://github.com/TsudaKageyu/minhook): clone or extract it
   into a `minhook` folder in this repository, so that `minhook\include` and
   `minhook\src` exist.
@@ -85,15 +85,22 @@ You need:
 Then run this from the repository folder in any shell:
 
 ```
-cmd /c build_scenario.bat
+build.bat
 ```
 
-It sets up the 32-bit compiler, prints the active scenario and produces
-`dinput8.dll`. If you're already in an "x86 Native Tools Command Prompt",
-plain `build.bat` does the same. Each enhancement can be switched off at the
-top of `dinput8.cpp` by setting its toggle to 0. `ENABLE_LOAD_PHASES_LOG`
-has to stay on for the streaming and mipmap enhancements, because they run
-inside its hooks.
+It sets up the 32-bit compiler itself, prints the active scenario and produces
+`dinput8.dll`. Each enhancement can be switched off at the top of `dinput8.cpp`
+by setting its toggle to 0.
+
+For a release build with no logging, add `-release`:
+
+```
+build.bat -release
+```
+
+That defines `LOGGING_ENABLED=0`: the DLL never creates `kotor2_log.txt`, and
+only the hooks that change behaviour are installed (the splash skip, streaming
+and mipmap enhancements).
 
 ## Installation
 Just copy the `dinput8.dll` into the same directory as your swkotor2.exe

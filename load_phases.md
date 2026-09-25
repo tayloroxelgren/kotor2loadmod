@@ -5,7 +5,8 @@ reload lasted. `LoadPhases` says why, using engine events stamped on the same QP
 clock and emitted from `EmitVisualLoad`, so the two can be compared line for line.
 It changes no behaviour: every detour forwards all arguments and returns the
 original's EAX untouched. `ENABLE_LOAD_PHASES_LOG` (top of the LP block in
-`dinput8.cpp`) turns it off.
+`dinput8.cpp`) is tied to `LOGGING_ENABLED`; a build with `LOGGING_ENABLED=0`
+leaves the whole thing out.
 
 ## Hooked functions
 

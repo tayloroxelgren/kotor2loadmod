@@ -10,7 +10,13 @@
 #include "minhook/include/MinHook.h"
 #include <Windows.h>
 
+// Master switch for every diagnostic: kotor2_log.txt, the load-phase hooks and the
+// visual-load timeline.  Build with /DLOGGING_ENABLED=0 (build.bat release) for a
+// shipping DLL that writes nothing; the load-time enhancements below do not
+// depend on it.
+#ifndef LOGGING_ENABLED
 #define LOGGING_ENABLED 1
+#endif
 #define LOG_LOADSCREEN_ONLY 0
 #define LOG_HIGH_FREQUENCY_CALLS 0
 // Stability build: install only the small, signature-checked hook set below.  The
@@ -129,7 +135,8 @@ bool ShouldLogMessage(const std::string& msg) {
 }
 
 void Log(const std::string& msg) {
-    if(LOGGING_ENABLED){
+#if LOGGING_ENABLED
+    {
         std::lock_guard<std::mutex> lock(g_logMutex);
         if (g_logFile.is_open() && ShouldLogMessage(msg)) {
             SYSTEMTIME st;
@@ -139,6 +146,9 @@ void Log(const std::string& msg) {
             g_logFile.flush();
         }
     }
+#else
+    (void)msg;
+#endif
 }
 
 // End-to-end transition profiler.  The load-state object is only a coordinator
@@ -446,7 +456,7 @@ static void DumpProfilerHookCounts(const char* reason) {
 // presented it emits one VisualLoad line with the frame-derived anatomy
 // (click -> loading screen -> black -> first gameplay frame) plus compact
 // FrameRun lines so the classification itself can be checked against video.
-#define ENABLE_VISUAL_LOAD_TIMELINE 1
+#define ENABLE_VISUAL_LOAD_TIMELINE LOGGING_ENABLED
 
 typedef void (APIENTRY* VlGlReadPixels_t)(int, int, int, int, unsigned int, unsigned int, void*);
 typedef void (APIENTRY* VlGlGetIntegerv_t)(unsigned int, int*);
@@ -676,13 +686,12 @@ static void ArmVisualLoad(unsigned int id, LARGE_INTEGER now);
 // Hot-path rule: the per-tick hook (0x00537590) runs for every server tick of
 // the whole session.  Outside a window it is a flag test and a forward; inside
 // one it only bumps counters and fills fixed arrays -- no per-call Log().
-#define ENABLE_LOAD_PHASES_LOG 1
-#if FORCE_AREA_STREAM_DURING_LOAD && !ENABLE_LOAD_PHASES_LOG
-#error FORCE_AREA_STREAM_DURING_LOAD is applied inside the LoadPhases tick hook (0x00537590)
-#endif
-#if FORCE_HW_MIPMAP_GEN && !ENABLE_LOAD_PHASES_LOG
-#error FORCE_HW_MIPMAP_GEN is applied by a LoadPhases hook (0x00484a60)
-#endif
+// The enhancements (FORCE_AREA_STREAM_DURING_LOAD at 0x00537590, FORCE_HW_MIPMAP_GEN
+// at 0x00484a60) share those two addresses with the diagnostic hooks, since MinHook
+// allows one detour per address.  Both flavours call the same StreamForceFlag /
+// ApplyHwMipmapForce helpers; with logging off, InstallEnhancementHooks installs
+// bare detours instead.
+#define ENABLE_LOAD_PHASES_LOG LOGGING_ENABLED
 #define LP_EVENT_MAX 128
 #define LP_TICK_MAX 64
 #define LP_MSG_MAX 64
@@ -1901,6 +1910,51 @@ void __fastcall Hook_GameSaveLoadCore(
     }
 }
 
+// ---------------------------------------------------------------------------
+// Load-time enhancements.  Compiled regardless of LOGGING_ENABLED.
+// ---------------------------------------------------------------------------
+// FORCE_AREA_STREAM_DURING_LOAD: player+0x24 is the player's area-load state.
+// It is 1 while the area streams and Server_HandleAreaMsg (0x00660600) flips it
+// to 2 on the client's area-loaded ack (P(4,3)), so forcing only while it is 1
+// covers exactly the throttle-paced stream and leaves gameplay at 200 ms.  The
+// force flag skips only the 200 ms time compare (0x00537689); the function's
+// own "is this player updatable yet" checks (+0x7c, creature+0x350) still run
+// first.  The engine passes force=1 itself from FUN_0089fbd0.
+static uint32_t StreamForceFlag(uint32_t player, uint32_t force) {
+#if FORCE_AREA_STREAM_DURING_LOAD
+    if (force != 1 && player != 0 && *(unsigned char*)(player + 0x24) == 1) {
+        return 1;
+    }
+#endif
+    return force;
+}
+
+// GL_CanUseHardwareMipmapGen 0x00484a60: cdecl, no args, plain RET; result
+// cached in 0x009f6134.  Its only caller is Texture_UploadToGL.  With
+// FORCE_HW_MIPMAP_GEN, a 0 becomes 1 when the GL_SGIS_generate_mipmap bit
+// (mask at 0x009f60b8) is set in the detected-extension word (0x00a32df8).
+static int ApplyHwMipmapForce(int r, bool& forced) {
+    forced = false;
+#if FORCE_HW_MIPMAP_GEN
+    if (r == 0) {
+        const DWORD haveExt = *(const DWORD*)0x00a32df8;
+        const DWORD sgisBit = *(const DWORD*)0x009f60b8;
+        if (sgisBit != 0 && (haveExt & sgisBit) == sgisBit) {
+            r = 1;
+            forced = true;
+        }
+    }
+#endif
+    return r;
+}
+
+// Prologue signatures for the two shared detour addresses.
+static const BYTE kSigUpdateClient[] = {0x55,0x8b,0xec,0x83,0xec,0x54};
+static const BYTE kSigMipCheck[] = {0x55,0x8b,0xec,0x83,0xec,0x0c,0x83,0x3d,0x34,0x61,0x9f,0x00};
+
+static bool InstallCheckedHook(DWORD address, LPVOID detour, LPVOID* original, const char* name);
+static bool MatchesExecutableBytes(DWORD address, const BYTE* expected, size_t length);
+
 #if ENABLE_LOAD_PHASES_LOG
 // Load-phase hooks (log only).  Conventions were read from each function's
 // prologue and RET in Ghidra (2026-09-24); a wrong arity corrupts the caller's
@@ -1998,22 +2052,6 @@ static bool LpReadThrottleStamp(void* player, unsigned long long& out) {
     __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;
     }
-}
-
-// FORCE_AREA_STREAM_DURING_LOAD: player+0x24 is the player's area-load state.
-// It is 1 while the area streams and Server_HandleAreaMsg (0x00660600) flips it
-// to 2 on the client's area-loaded ack (P(4,3)), so forcing only while it is 1
-// covers exactly the throttle-paced stream and leaves gameplay at 200 ms.  The
-// force flag skips only the 200 ms time compare (0x00537689); the function's
-// own "is this player updatable yet" checks (+0x7c, creature+0x350) still run
-// first.  The engine passes force=1 itself from FUN_0089fbd0.
-static uint32_t StreamForceFlag(uint32_t player, uint32_t force) {
-#if FORCE_AREA_STREAM_DURING_LOAD
-    if (force != 1 && player != 0 && *(unsigned char*)(player + 0x24) == 1) {
-        return 1;
-    }
-#endif
-    return force;
 }
 
 uint32_t __fastcall Hook_LpUpdateClient(
@@ -2142,26 +2180,12 @@ LP_SCRIPT_FADE_HOOK(Hook_LpFadeOut, g_lpOrigFadeOut, LP_SCRIPT_FADE_OUT)
 LP_SCRIPT_FADE_HOOK(Hook_LpFadeIn, g_lpOrigFadeIn, LP_SCRIPT_FADE_IN)
 LP_SCRIPT_FADE_HOOK(Hook_LpFadeUntil, g_lpOrigFadeUntil, LP_SCRIPT_FADE_UNTIL)
 
-// GL_CanUseHardwareMipmapGen 0x00484a60: cdecl, no args, plain RET; result
-// cached in 0x009f6134.  Its only caller is Texture_UploadToGL.  With
-// FORCE_HW_MIPMAP_GEN, a 0 becomes 1 when the GL_SGIS_generate_mipmap bit
-// (mask at 0x009f60b8) is set in the detected-extension word (0x00a32df8).
 typedef int (__cdecl* LpMipCheck_t)();
 static LpMipCheck_t g_lpOrigMipCheck = nullptr;
 
 int __cdecl Hook_LpMipCheck() {
-    int r = g_lpOrigMipCheck();
     bool forced = false;
-#if FORCE_HW_MIPMAP_GEN
-    if (r == 0) {
-        const DWORD haveExt = *(const DWORD*)0x00a32df8;
-        const DWORD sgisBit = *(const DWORD*)0x009f60b8;
-        if (sgisBit != 0 && (haveExt & sgisBit) == sgisBit) {
-            r = 1;
-            forced = true;
-        }
-    }
-#endif
+    const int r = ApplyHwMipmapForce(g_lpOrigMipCheck(), forced);
     if (LpActive()) {
         ++g_lp.mipChecks;
         g_lp.mipForced += forced ? 1 : 0;
@@ -2210,10 +2234,6 @@ int WINAPI Hook_LpGluBuild2DMipmaps(
     return r;
 }
 
-// Both are defined with the other hook-install helpers further down.
-static bool InstallCheckedHook(DWORD address, LPVOID detour, LPVOID* original, const char* name);
-static bool MatchesExecutableBytes(DWORD address, const BYTE* expected, size_t length);
-
 // Each phase hook is signature-checked on its own and skipped (with a log
 // line) on mismatch, so a bad address costs one log row instead of the whole
 // mod: the global IsSupportedSteamExecutable gate is all-or-nothing.
@@ -2233,7 +2253,6 @@ static void InstallLoadPhaseHooks() {
     static const BYTE sigFinalize[] = {0x55,0x8b,0xec,0x6a,0xff,0x68,0x5b,0x7b,0x95,0x00};
     static const BYTE sigAnnounce[] = {0x55,0x8b,0xec,0x83,0xec,0x10};
     static const BYTE sigState12[] = {0x55,0x8b,0xec,0x6a,0xff,0x68,0xe8,0xec,0x94,0x00};
-    static const BYTE sigTick[] = {0x55,0x8b,0xec,0x83,0xec,0x54};
     static const BYTE sigBuild[] = {0x55,0x8b,0xec,0x83,0xec,0x74};
     static const BYTE sigProgress[] = {0x55,0x8b,0xec,0x83,0xec,0x10};
     static const BYTE sigAreaLoaded[] = {0x55,0x8b,0xec,0x51};
@@ -2243,7 +2262,6 @@ static void InstallLoadPhaseHooks() {
     static const BYTE sigFadeIn[] = {0x55,0x8b,0xec,0x83,0xec,0x3c};
     static const BYTE sigFadeUntil[] = {0x55,0x8b,0xec,0x83,0xec,0x0c};
     static const BYTE sigGetWrite[] = {0x55,0x8b,0xec,0x83,0xec,0x0c};
-    static const BYTE sigMipCheck[] = {0x55,0x8b,0xec,0x83,0xec,0x0c,0x83,0x3d,0x34,0x61,0x9f,0x00};
     static const BYTE sigTexUpload[] = {0x55,0x8b,0xec,0x83,0xec,0x7c,0x8b,0x45,0x08};
 #define LP_INSTALL(ADDR, SIG, DETOUR, ORIG, NAME) \
     InstallLoadPhaseHook(ADDR, SIG, sizeof(SIG), (LPVOID)&DETOUR, (LPVOID*)&ORIG, NAME)
@@ -2251,7 +2269,7 @@ static void InstallLoadPhaseHooks() {
     LP_INSTALL(0x00647af0, sigAnnounce, Hook_LpAnnounce, g_lpOrigAnnounce, "LP_Server_SendStateToClient");
     LP_INSTALL(0x00812350, sigNetEvents, Hook_LpNetEvents, g_lpOrigNetEvents, "LP_HandleNetEvents");
     LP_INSTALL(0x005361d0, sigState12, Hook_LpState12, g_lpOrigState12, "LP_Server_StartGame_State1to2");
-    LP_INSTALL(0x00537590, sigTick, Hook_LpUpdateClient, g_lpOrigTick, "LP_Server_UpdateClient_Throttle200ms");
+    LP_INSTALL(0x00537590, kSigUpdateClient, Hook_LpUpdateClient, g_lpOrigTick, "LP_Server_UpdateClient_Throttle200ms");
     LP_INSTALL(0x0063caa0, sigBuild, Hook_LpBuildUpdate, g_lpOrigBuildUpdate, "LP_Server_BuildClientObjectUpdate");
     LP_INSTALL(0x005e47e0, sigGetWrite, Hook_LpGetWriteMessage, g_lpOrigGetWriteMessage, "LP_Message_GetWriteMessage");
     LP_INSTALL(0x0063cee0, sigProgress, Hook_LpProgress, g_lpOrigProgress, "LP_Server_WriteAreaLoadProgressW");
@@ -2260,7 +2278,7 @@ static void InstallLoadPhaseHooks() {
     LP_INSTALL(0x00696b00, sigFadeOut, Hook_LpFadeOut, g_lpOrigFadeOut, "LP_SetGlobalFadeOut");
     LP_INSTALL(0x006969e0, sigFadeIn, Hook_LpFadeIn, g_lpOrigFadeIn, "LP_SetGlobalFadeIn");
     LP_INSTALL(0x00699db0, sigFadeUntil, Hook_LpFadeUntil, g_lpOrigFadeUntil, "LP_SetFadeUntilScript");
-    LP_INSTALL(0x00484a60, sigMipCheck, Hook_LpMipCheck, g_lpOrigMipCheck, "LP_GL_CanUseHardwareMipmapGen");
+    LP_INSTALL(0x00484a60, kSigMipCheck, Hook_LpMipCheck, g_lpOrigMipCheck, "LP_GL_CanUseHardwareMipmapGen");
     LP_INSTALL(0x00433cd0, sigTexUpload, Hook_LpTexUpload, g_lpOrigTexUpload, "LP_Texture_UploadToGL");
 #undef LP_INSTALL
     HMODULE glu = GetModuleHandleA("glu32.dll");
@@ -2271,6 +2289,41 @@ static void InstallLoadPhaseHooks() {
     } else {
         Log("LoadPhases: glu32!gluBuild2DMipmaps not found, hook skipped");
     }
+}
+#else  // !ENABLE_LOAD_PHASES_LOG
+// Bare detours for the two enhancements, installed when the diagnostic hooks
+// are compiled out.  Same signatures and conventions as Hook_LpUpdateClient
+// (RET 0x10) and Hook_LpMipCheck (cdecl, no args).
+typedef uint32_t (__thiscall* UpdateClientPtr_t)(void* thisPtr, uint32_t player,
+    uint32_t force, uint32_t timeLo, uint32_t timeHi);
+static UpdateClientPtr_t g_origUpdateClient = nullptr;
+typedef int (__cdecl* MipCheckPtr_t)();
+static MipCheckPtr_t g_origMipCheck = nullptr;
+
+uint32_t __fastcall Hook_UpdateClientForce(
+    void* thisPtr, void* edx, uint32_t player, uint32_t force, uint32_t timeLo,
+    uint32_t timeHi) {
+    return g_origUpdateClient(thisPtr, player, StreamForceFlag(player, force), timeLo, timeHi);
+}
+
+int __cdecl Hook_MipCheckForce() {
+    bool forced = false;
+    return ApplyHwMipmapForce(g_origMipCheck(), forced);
+}
+
+static void InstallEnhancementHooks() {
+#if FORCE_AREA_STREAM_DURING_LOAD
+    if (MatchesExecutableBytes(0x00537590, kSigUpdateClient, sizeof(kSigUpdateClient))) {
+        InstallCheckedHook(0x00537590, (LPVOID)&Hook_UpdateClientForce,
+            (LPVOID*)&g_origUpdateClient, "Server_UpdateClient_Throttle200ms");
+    }
+#endif
+#if FORCE_HW_MIPMAP_GEN
+    if (MatchesExecutableBytes(0x00484a60, kSigMipCheck, sizeof(kSigMipCheck))) {
+        InstallCheckedHook(0x00484a60, (LPVOID)&Hook_MipCheckForce,
+            (LPVOID*)&g_origMipCheck, "GL_CanUseHardwareMipmapGen");
+    }
+#endif
 }
 #endif  // ENABLE_LOAD_PHASES_LOG
 
@@ -5449,6 +5502,10 @@ static void InstallPerformanceHooks() {
         (LPVOID*)&g_originalPreloadInitialAssetsWrapperPtr, "PreloadInitialAssetsWrapper");
 #endif
 
+    // Timing-only hooks below install only when logging is on.  With
+    // LOGGING_ENABLED=0 the behaviour set is: PreloadInitialAssetsWrapper, the two
+    // enhancement hooks, and whichever scenario-flag hooks are compiled in.
+#if LOGGING_ENABLED
     // Engine supplies phase observations only. Coordinator state clear is not a
     // completion boundary because queued client/module work continues afterward.
     InstallCheckedHook(0x00781be0, (LPVOID)&Hook_Engine,
@@ -5487,6 +5544,10 @@ static void InstallPerformanceHooks() {
     // save read/deserialization phase.
     InstallCheckedHook(0x00638bd0, (LPVOID)&Hook_GameSaveLoadCore,
         (LPVOID*)&g_originalGameSaveLoadCore, "GameSaveLoad_Core");
+#elif CLAMP_LONG_FADES
+    InstallCheckedHook(0x007bc8f0, (LPVOID)&Hook_CSWGuiFade_SetTransitionState,
+        (LPVOID*)&g_originalCSWGuiFade_SetTransitionState, "CSWGuiFadeTiming");
+#endif
 
     // Packet handlers: attribute pre-activation packet-drain work per family.
     // DISABLED: crashing the game on load.  Convention must be verified from
@@ -5500,6 +5561,7 @@ static void InstallPerformanceHooks() {
         (LPVOID*)&g_originalSPacketHandlerTiming, "SPacketHandlerTiming");
 #endif
 
+#if LOGGING_ENABLED
     // Present tracker: closes the perceived window at the first gameplay frame.
     HMODULE gdi32Module = GetModuleHandleA("gdi32.dll");
     void* swapBuffersAddr = gdi32Module != nullptr
@@ -5510,41 +5572,59 @@ static void InstallPerformanceHooks() {
     } else {
         Log("Failed to install SwapBuffers present tracker: gdi32 unavailable");
     }
+#endif
 
     // Read-only coordinator timing and scope tracking.  This detour does not alter
     // the CClientExoApp object graph or any engine ownership state.
+#if LOGGING_ENABLED || KEEP_ARCHIVE_OPEN_DURING_LOAD || PRESERVE_GUI_OBJECTS_ACROSS_LOADS ||     DEFER_INGAME_TAB_CONSTRUCTION || SKIP_DEBUG_GUI_CONSTRUCTION
     bool moduleChunkHookReady = InstallCheckedHook(0x007be4c0, (LPVOID)&Hook_ModuleChunkLoadCore,
         (LPVOID*)&g_originalModuleChunkLoadCore, "ModuleChunkLoadCore");
+#else
+    const bool moduleChunkHookReady = false;
+    (void)moduleChunkHookReady;
+#endif
 
     // Load-phase attribution (log only): engine events that split a reload
     // into work / handshake / throttle wait / scripted hold.  See load_phases.md.
 #if ENABLE_LOAD_PHASES_LOG
     InstallLoadPhaseHooks();
+#else
+    InstallEnhancementHooks();
 #endif
 
+#if LOGGING_ENABLED || THROTTLE_LOADING_SCREEN_PRESENTS ||     SKIP_LOADING_SCREEN_UPDATE_FRAME_IN_MODULE_CHUNK_LOAD_CORE
     InstallCheckedHook(0x00409ed0, (LPVOID)&Hook_LoadingScreenUpdateFrame,
         (LPVOID*)&g_originalLoadingScreenUpdateFrame, "LoadingScreenUpdateFrame");
+#endif
+#if LOGGING_ENABLED
     InstallCheckedHook(0x00533830, (LPVOID)&Hook_loadingscreenPtr,
         (LPVOID*)&g_originalLoadingScreenPtr, "loadingscreen");
+#endif
+#if LOGGING_ENABLED || ENABLE_ARCHIVE_RESOURCE_CACHE
     InstallCheckedHook(0x00713bf0, (LPVOID)&Hook_ResourceLoadFromArchive,
         (LPVOID*)&g_originalResourceLoadFromArchive, "ResourceLoadFromArchive");
     InstallCheckedHook(0x00729370, (LPVOID)&Hook_CExoEncapsulatedFile_ReadResourceSync,
         (LPVOID*)&g_originalCExoEncapsulatedFile_ReadResourceSync,
         "CExoEncapsulatedFile_ReadResourceSync");
+#endif
+#if LOGGING_ENABLED
     InstallCheckedHook(0x00711600, (LPVOID)&Hook_WorkerSubmitJob,
         (LPVOID*)&g_originalWorkerSubmitJob, "Worker_SubmitJob");
     InstallCheckedHook(0x00703f30, (LPVOID)&Hook_ProcessResourceQueueTransition,
         (LPVOID*)&g_originalProcessResourceQueuePtr, "ProcessResourceQueueTransition");
+#endif
 #if ENABLE_ARCHIVE_RESOURCE_CACHE
     Log("Archive resource cache enabled; max_bytes=" +
         std::to_string((size_t)ARCHIVE_CACHE_MAX_BYTES));
 #else
     Log("Archive resource cache disabled (baseline)");
 #endif
+#if LOGGING_ENABLED || ENABLE_GUI_CONTROLS_LOOKUP_CACHE
     InstallCheckedHook(0x00418df0, (LPVOID)&Hook_GUI_FindAndBindControlByTag,
         (LPVOID*)&g_originalGUI_FindAndBindControlByTag, "GUI_FindAndBindControlByTag");
     InstallCheckedHook(0x007178e0, (LPVOID)&Hook_GFF_LookupFieldLabelByName,
         (LPVOID*)&g_originalGFF_LookupFieldLabelByName, "GFF_LookupFieldLabelByName");
+#endif
 
 #if ENABLE_NATIVE_LAZY_GUI_MODE
     if (moduleChunkHookReady) {
@@ -6818,7 +6898,9 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
     switch (ul_reason_for_call) {
         case DLL_PROCESS_ATTACH:
             DisableThreadLibraryCalls(hModule);
+#if LOGGING_ENABLED
             g_logFile.open("kotor2_log.txt", std::ios::app);
+#endif
             
             // Install hook after delay
             CreateThread(nullptr, 0, [](LPVOID) -> DWORD {

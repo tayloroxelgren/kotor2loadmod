@@ -1,94 +1,99 @@
 # Kotor 2 Efficient Load Times
-This mod aims to improve the load times for the steam version of Kotor 2
+A `dinput8.dll` proxy mod that shortens load times in the Steam version of
+Star Wars: Knights of the Old Republic II. It doesn't change any game files.
+It hooks a few engine functions at runtime and either skips work the game
+doesn't need, or stops the game from waiting when it doesn't have to.
 
-## Status
-The mod is in development. Analysis has mapped the main loading,
-resource-manager, archive I/O, and loading-screen paths. The current patch
-focuses on isolated changes that preserve the game's normal resource parsing
-and initialization behavior.
+## Enhancements
 
-### Improvements
-- **Initial asset preload no-op:** skips `PreloadInitialAssetsWrapper`, removing
-  the initial splash-screen preload work.
-- **Two-level archive resource cache:** caches successful ERF/MOD/HAK reads at
-  `CExoEncapsulatedFile_ReadResourceSync` and serves repeated synchronous loads
-  from `ResourceLoadFromArchive`. Cache hits bypass repeated archive
-  open/seek/read/close work while retaining the engine's buffer allocation and
-  resource parser callback.
+Savings were measured on a quicksave reload in Peragus (101PER), four loads per
+build, with the game running at about 170 fps. Bigger areas load more objects and textures, so they
+should save more.
 
-In an eight-load A/B test, the archive path was reduced by about 77% (421 ms to
-95 ms total), `ModuleChunkLoadCore` improved by about 8.6%, and total measured
-loading-screen time improved by about 2.5%. The next candidate is applying the
-same cache design to the BIF/KEY archive path.
+| Enhancement | What it removes | Estimated saving |
+|---|---|---|
+| Skip intros | Intro/splash asset preload at game start | Startup only; not yet timed |
+| Forced area streaming | A 200 ms wait between each piece of area data | **~1.3 s per load** (1.90 s → 0.56 s) |
+| GPU mipmap generation | CPU-side texture mipmap building | **~145 ms per load** |
 
-The profiler also records `LoadTransitionWallTime`, measured from the `Engine`
-tick that activates the load state until the first tick where gameplay resumes.
-Its transition breakdown separates outer main-loop time from nested inclusive
-timers and reports resource-queue draining and worker-submit waits.
+Together these take roughly **1.5 s** off every load in 101PER.
 
-### A/B testing
-Optimization toggles are switched as one unit via `AB_SCENARIO` at the top of
-`dinput8.cpp` (`AB_SCENARIO_A` = baseline, `AB_SCENARIO_B` = optimized round 1:
-present throttle + archive cache + debug-GUI skip). Build with
-`cmd /c build_scenario.bat`, then follow the run checklist in `ab_testing.md`.
-Each game session writes a `ProfilerRunStart` line identifying the scenario and
-toggle values, and `loadingscreen_timeparse.py` analyzes the latest run.
+### Skip intros
+When the game starts, `PreloadInitialAssetsWrapper` (0x0073f050) loads the
+intro/splash-screen assets before you reach the main menu. The mod turns that
+call into a no-op, so the game goes straight on to the menu.
+Toggle: `SKIP_PRELOAD_INITIAL_ASSETS_WRAPPER`.
 
-### Visual load timeline (2026-09-11)
-Every engine-state anchor (load-state clear, final drain, first post-drain
-present, load-context substate, client busy flag at `*(*(client+4)+0x90)`)
-ends the window at the first black frame — the engine's state machine
-considers the load over while the screen is still black for seconds. To
-measure what the player actually experiences, the profiler now records a
-pixel-classified timeline: before each `SwapBuffers` flip it reads four rows
-of the OpenGL back buffer (`glReadPixels`, resolved dynamically from
-`opengl32.dll`), classifies the frame as **loading** (presented from inside
-`LoadingScreenUpdateFrame`, or pixel-identical to the last such frame =
-frozen loading screen), **black** (max luminance < 12), or **other** (bright
-gameplay/menu), and polls the physical mouse button to anchor the click.
-A load's `VisualLoad` line is emitted only after several consecutive bright
-gameplay frames have been presented; `FrameRun` lines give the per-class
-frame sequence so the classification can be checked against captured video.
+### Forced area streaming
+KOTOR 2 runs a client and a server inside the same process, even in single
+player. When a load finishes, the server sends the player's client the area's
+objects in small messages of about 2 KB each. The loading screen stays up
+until the last one arrives. The server sends at most one message every
+200 ms (`Server_UpdateClient_Throttle200ms`, 0x00537590). That limit makes
+sense over a network, but here client and server share one process. Peragus
+needs 9 messages, so the loading screen sat idle for about 1.9 s while the
+actual sending took about 2 ms.
 
-Measured warm save-reload (scenario C, `run_id=11974559023701`): **6,605 ms
-click-to-first-gameplay-frame**, matching hand timing (~5–6 s) where every
-engine-anchored metric read 0.4–0.7 s:
+The engine's update function already has a "send now" flag, and the engine
+uses it itself elsewhere. The mod sets that flag only while the player's area
+is still loading (`player+0x24 == 1`), so one message goes out per frame
+instead of one per 200 ms. Once the client reports the area as loaded, normal
+gameplay keeps the original 200 ms rate. Only the waits between messages
+change: the same data is sent, just sooner.
+Toggle: `FORCE_AREA_STREAM_DURING_LOAD`. Details: `stream_force.md`.
 
-| Phase | Measured | Frames |
-|---|---:|---|
-| Click → loading screen visible (frozen menu) | 1,314 ms | 11 (10 pixel-identical) |
-| Loading screen visible | 2,375 ms | 311 |
-| Black window | 2,904 ms | 353 (352 pixel-identical) |
-| **Total** | **6,605 ms** | 682 |
+### GPU mipmap generation
+Each texture needs a set of smaller copies (mipmaps) for surfaces seen at a
+distance. The game can have the graphics driver build them on the GPU, but it
+only does so if a startup check passes (`GL_CanUseHardwareMipmapGen`,
+0x00484a60). That check rejects any driver that supports
+`GL_ARB_fragment_program`, which is every modern GPU, probably as a workaround
+for an old ATI driver bug. So the game falls back to `gluBuild2DMipmaps`, which
+builds every mipmap level on the CPU while the loading screen waits.
 
-Findings:
+The mod makes the check pass whenever the driver supports GPU mipmap
+generation (`GL_SGIS_generate_mipmap`). Uploading the 28 textures that
+Peragus loads here went from 147 ms to under 1 ms of main-thread time.
+Toggle: `FORCE_HW_MIPMAP_GEN`. Details: `hw_mipmaps.md`.
 
-- The engine's whole "load" is 408 ms (activation@1,352 ms → end@1,760 ms)
-  inside a 6.6-second load. Everything else is waiting.
-- The 1.3 s pre-activation phase is a frozen menu: 11 frames in 1.3 s, 10 of
-  them pixel-identical — the save read (62 MB of loose-file I/O in this
-  window) blocks rendering before the loading screen even exists.
-- The loading screen runs while the engine's load state is zero
-  (`load_state=0` on every long run). The same frame is re-presented ~33
-  times per ~200 ms — content changes only ~5 times per second. That's the
-  one-queue-stage-per-coordinator-tick pacing, and the fade clamp can't
-  touch it.
-- The black window is 353 frames, 352 pixel-identical, with the engine
-  "done" the entire time. The fade-in doesn't even start until 5,703 ms —
-  3.9 s after the engine finished — and even clamped to 1 ms, the first
-  bright frame takes another ~900 ms after that. So the black window isn't
-  fade animation; it's the engine presenting nothing while something (scene
-  setup/streaming after the fade is scheduled) completes.
-- Total engine busy across the whole 6.6 s: ~340 ms of queue drain, ~63 ms
-  of coordinator work. The load is ~95% deliberate pacing and idle waiting,
-  which confirms the near-zero plan's Layer-1 diagnosis with hard visual
-  evidence.
+### Measurement tools (for development)
+The DLL also writes a timing log, `kotor2_log.txt`, in the game folder. It has:
 
-Optimization targets in measured size order: the ~2.9 s post-engine black
-window, the ~2.0 s of stale-paced loading screen (pump the queue per tick
-instead of one stage per tick), and the ~1.3 s pre-activation freeze
-(byte-cache the 62 MB save read; the scenario-B archive cache already hooks
-that read path).
+- **`VisualLoad` / `FrameRun`:** what the player sees, from the click to the
+  first gameplay frame. Each frame is sorted as loading screen, black or
+  gameplay from its pixels.
+- **`LoadPhases`:** why it takes that long. Engine events split each load into
+  work, handshake, streaming and scripted fade (`load_phases.md`).
+- **`LoadPhaseSample`:** a stack sampler that records where the main thread is
+  about every 2 ms during a load. `python lp_samples.py --summary` turns the
+  samples into a table of where the time went.
+
+Other experimental optimizations (archive byte cache, loading-screen present
+throttle, fade clamp) are off by default and can be switched on with
+`AB_SCENARIO`. See `ab_testing.md`.
+
+## Building it yourself
+You need:
+
+- Windows, with Visual Studio 2022 (the "Desktop development with C++"
+  workload). `build_scenario.bat` expects `vcvars32.bat` in the default
+  Community install path, so edit that line if yours is elsewhere.
+- [MinHook](https://github.com/TsudaKageyu/minhook): clone or extract it
+  into a `minhook` folder in this repository, so that `minhook\include` and
+  `minhook\src` exist.
+
+Then run this from the repository folder in any shell:
+
+```
+cmd /c build_scenario.bat
+```
+
+It sets up the 32-bit compiler, prints the active scenario and produces
+`dinput8.dll`. If you're already in an "x86 Native Tools Command Prompt",
+plain `build.bat` does the same. Each enhancement can be switched off at the
+top of `dinput8.cpp` by setting its toggle to 0. `ENABLE_LOAD_PHASES_LOG`
+has to stay on for the streaming and mipmap enhancements, because they run
+inside its hooks.
 
 ## Installation
 Just copy the `dinput8.dll` into the same directory as your swkotor2.exe

@@ -703,7 +703,7 @@ static void ArmVisualLoad(unsigned int id, LARGE_INTEGER now);
 // SaveLoadRequest fires on them, so this is the only way to see that first
 // 0.8 s.  Costs ~2% of the main thread for 2 s after every gameplay click, so
 // leave it off outside attribution runs.
-#define LP_SAMPLE_FROM_CLICK 1
+#define LP_SAMPLE_FROM_CLICK 0
 
 enum LpKind : unsigned char {
     LP_FINALIZE_ENTER = 0,  // ModuleLoad_FinalizeAndQueueReady 0x0055a650

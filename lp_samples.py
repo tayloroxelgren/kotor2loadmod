@@ -1,4 +1,4 @@
-"""Group LoadPhaseSample stacks by stream gap (see stream_force.md).
+"""Group LoadPhaseSample stacks by stream gap (see aidocs/stream_force.md).
 
 Usage: python lp_samples.py [kotor2_log.txt] [--top N] [--id ID] [--funcs FILE]
                              [--summary] [--run-id RUN_ID]

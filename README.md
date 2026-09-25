@@ -10,14 +10,6 @@ Savings were measured on a quicksave reload in Peragus (101PER), four loads per
 build, with the game running at about 170 fps. Bigger areas load more objects and textures, so they
 should save more.
 
-| Enhancement | What it removes | Estimated saving |
-|---|---|---|
-| Skip intros | Intro/splash asset preload at game start | Startup only; not yet timed |
-| Forced area streaming | A 200 ms wait between each piece of area data | **~1.3 s per load** (1.90 s → 0.56 s) |
-| GPU mipmap generation | CPU-side texture mipmap building | **~145 ms per load** |
-
-Together these take roughly **1.5 s** off every load in 101PER.
-
 ### Skip intros
 When the game starts, `PreloadInitialAssetsWrapper` (0x0073f050) loads the
 intro/splash-screen assets before you reach the main menu. The mod turns that
@@ -40,7 +32,9 @@ is still loading (`player+0x24 == 1`), so one message goes out per frame
 instead of one per 200 ms. Once the client reports the area as loaded, normal
 gameplay keeps the original 200 ms rate. Only the waits between messages
 change: the same data is sent, just sooner.
-Toggle: `FORCE_AREA_STREAM_DURING_LOAD`. Details: `stream_force.md`.
+Toggle: `FORCE_AREA_STREAM_DURING_LOAD`. Details: `aidocs/stream_force.md`.
+
+**Estimated saving:** about **1.3 s per load** (1.90 s → 0.56 s).
 
 ### GPU mipmap generation
 Each texture needs a set of smaller copies (mipmaps) for surfaces seen at a
@@ -54,23 +48,13 @@ builds every mipmap level on the CPU while the loading screen waits.
 The mod makes the check pass whenever the driver supports GPU mipmap
 generation (`GL_SGIS_generate_mipmap`). Uploading the 28 textures that
 Peragus loads here went from 147 ms to under 1 ms of main-thread time.
-Toggle: `FORCE_HW_MIPMAP_GEN`. Details: `hw_mipmaps.md`.
+Toggle: `FORCE_HW_MIPMAP_GEN`. Details: `aidocs/hw_mipmaps.md`.
 
-### Measurement tools (for development)
-The DLL also writes a timing log, `kotor2_log.txt`, in the game folder. It has:
+**Estimated saving:** about **145 ms per load**.
 
-- **`VisualLoad` / `FrameRun`:** what the player sees, from the click to the
-  first gameplay frame. Each frame is sorted as loading screen, black or
-  gameplay from its pixels.
-- **`LoadPhases`:** why it takes that long. Engine events split each load into
-  work, handshake, streaming and scripted fade (`load_phases.md`).
-- **`LoadPhaseSample`:** a stack sampler that records where the main thread is
-  about every 2 ms during a load. `python lp_samples.py --summary` turns the
-  samples into a table of where the time went.
+### Total
+Together these take roughly **1.4 s** off every load in 101PER.
 
-Other experimental optimizations (archive byte cache, loading-screen present
-throttle, fade clamp) are off by default and can be switched on with
-`AB_SCENARIO`. See `ab_testing.md`.
 
 ## Building it yourself
 You need:
@@ -101,6 +85,17 @@ build.bat -release
 That defines `LOGGING_ENABLED=0`: the DLL never creates `kotor2_log.txt`, and
 only the hooks that change behaviour are installed (the splash skip, streaming
 and mipmap enhancements).
+
+To build a DLL with no hooks at all, for an unmodified-engine baseline, add
+`-nohooks`:
+
+```
+build.bat -nohooks
+```
+
+That defines `NO_HOOKS`: the DLL only forwards `DirectInput8Create` to the real
+`dinput8.dll`. It installs no hooks, applies none of the enhancements and writes
+no log. If `-release` is also given, `-nohooks` wins.
 
 ## Installation
 Just copy the `dinput8.dll` into the same directory as your swkotor2.exe

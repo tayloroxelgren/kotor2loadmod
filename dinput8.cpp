@@ -14,6 +14,12 @@
 // visual-load timeline.  Build with /DLOGGING_ENABLED=0 (build.bat release) for a
 // shipping DLL that writes nothing; the load-time enhancements below do not
 // depend on it.
+// NO_HOOKS (build.bat -nohooks): a plain pass-through proxy.  No logging, no
+// enhancements and no hooks at all; MinHook is never initialised.  Use it to get
+// an unmodified-engine baseline.
+#ifdef NO_HOOKS
+#define LOGGING_ENABLED 0
+#endif
 #ifndef LOGGING_ENABLED
 #define LOGGING_ENABLED 1
 #endif
@@ -22,7 +28,11 @@
 // Stability build: install only the small, signature-checked hook set below.  The
 // legacy profiler contains many unrelated detours and is intentionally opt-in.
 #define PERFORMANCE_HOOK_SET_ONLY 1
+#ifdef NO_HOOKS
+#define SKIP_PRELOAD_INITIAL_ASSETS_WRAPPER 0
+#else
 #define SKIP_PRELOAD_INITIAL_ASSETS_WRAPPER 1
+#endif
 #define SKIP_LOADING_SCREEN_UPDATE_FRAME_IN_MODULE_CHUNK_LOAD_CORE 0
 // Never force the engine's platform GUI mode.  On the PC build it leaves app-owned
 // GUI slots null that have no compatible lazy reconstruction path.
@@ -75,19 +85,27 @@
 // at most one per 200 ms (Server_UpdateClient_Throttle200ms 0x00537590), and
 // the loading screen stays up until the last one lands.  Passing the engine's
 // own force flag while the player is still streaming sends one per tick:
-// 101PER stream 1.90 s -> 0.56 s (scenario G, stream_force.md).  Set to 0 for
+// 101PER stream 1.90 s -> 0.56 s (scenario G, aidocs/stream_force.md).  Set to 0 for
 // a no-force control run; ProfilerRunStart logs it as stream_force=.
+#ifdef NO_HOOKS
+#define FORCE_AREA_STREAM_DURING_LOAD 0
+#else
 #define FORCE_AREA_STREAM_DURING_LOAD 1
+#endif
 // GPU mipmap generation for texture uploads.  Texture_UploadToGL (0x00433cd0)
 // builds mipmaps with GL_GENERATE_MIPMAP + glTexImage2D only when
 // GL_CanUseHardwareMipmapGen (0x00484a60, its only caller) returns 1; otherwise
 // it calls gluBuild2DMipmaps and builds every level on the CPU.  The check
 // fails whenever GL_ARB_fragment_program is present (GL_DetectExtensions sets
 // the disqualifying bit 0x100000 for it), i.e. on every modern driver: ~149 ms
-// of each 101PER reload's stream window (stream_force.md).  1 = return 1 when
+// of each 101PER reload's stream window (aidocs/stream_force.md).  1 = return 1 when
 // GL_SGIS_generate_mipmap is present.  Logged as hw_mipmaps=.
 #ifndef FORCE_HW_MIPMAP_GEN
+#ifdef NO_HOOKS
+#define FORCE_HW_MIPMAP_GEN 0
+#else
 #define FORCE_HW_MIPMAP_GEN 1
+#endif
 #endif
 #define ARCHIVE_CACHE_MAX_BYTES (256u * 1024u * 1024u)
 
@@ -675,7 +693,7 @@ static bool IsLoadingClass(unsigned char cls) {
 static void ArmVisualLoad(unsigned int id, LARGE_INTEGER now);
 
 // ---------------------------------------------------------------------------
-// Load-phase attribution (log only, no behaviour change).  See load_phases.md.
+// Load-phase attribution (log only, no behaviour change).  See aidocs/load_phases.md.
 //
 // The pixel timeline says HOW LONG each visible stretch lasted; these engine
 // event hooks say WHY.  Every event is stamped on the same QPC clock as the
@@ -5585,7 +5603,7 @@ static void InstallPerformanceHooks() {
 #endif
 
     // Load-phase attribution (log only): engine events that split a reload
-    // into work / handshake / throttle wait / scripted hold.  See load_phases.md.
+    // into work / handshake / throttle wait / scripted hold.  See aidocs/load_phases.md.
 #if ENABLE_LOAD_PHASES_LOG
     InstallLoadPhaseHooks();
 #else
@@ -6902,12 +6920,14 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
             g_logFile.open("kotor2_log.txt", std::ios::app);
 #endif
             
+#ifndef NO_HOOKS
             // Install hook after delay
             CreateThread(nullptr, 0, [](LPVOID) -> DWORD {
                 Sleep(10);
                 InstallHook();
                 return 0;
             }, nullptr, 0, nullptr);
+#endif
             break;
             
         case DLL_PROCESS_DETACH:

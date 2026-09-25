@@ -1,8 +1,9 @@
 @echo off
 setlocal
-REM Usage: build.bat [-release]
+REM Usage: build.bat [-release | -nohooks]
 REM   (no argument)  development build: logging and diagnostics on
 REM   -release       shipping build: /DLOGGING_ENABLED=0, no log file, no diagnostics
+REM   -nohooks       pass-through proxy: no hooks, no enhancements, no logging
 REM Run it from any shell; it sets up the 32-bit MSVC environment itself if needed.
 cd /d "%~dp0"
 
@@ -10,12 +11,26 @@ set DEFS=
 set MODE=development
 :parse
 if "%~1"=="" goto parsed
-if /i "%~1"=="-release" (set DEFS=/DLOGGING_ENABLED=0& set MODE=release& shift & goto parse)
-if /i "%~1"=="--release" (set DEFS=/DLOGGING_ENABLED=0& set MODE=release& shift & goto parse)
-if /i "%~1"=="/release" (set DEFS=/DLOGGING_ENABLED=0& set MODE=release& shift & goto parse)
+if /i "%~1"=="-release" goto opt_release
+if /i "%~1"=="--release" goto opt_release
+if /i "%~1"=="/release" goto opt_release
+if /i "%~1"=="-nohooks" goto opt_nohooks
+if /i "%~1"=="--nohooks" goto opt_nohooks
+if /i "%~1"=="/nohooks" goto opt_nohooks
 echo Unknown argument: %~1
-echo Usage: build.bat [-release]
+echo Usage: build.bat [-release ^| -nohooks]
 exit /b 1
+:opt_release
+if "%MODE%"=="nohooks" (shift & goto parse)
+set DEFS=/DLOGGING_ENABLED=0
+set MODE=release
+shift
+goto parse
+:opt_nohooks
+set DEFS=/DNO_HOOKS
+set MODE=nohooks
+shift
+goto parse
 :parsed
 
 REM vcvars32 sets VSCMD_ARG_TGT_ARCH; anything other than x86 (or no environment at

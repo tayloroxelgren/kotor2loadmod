@@ -202,6 +202,13 @@ static long long QpcElapsedUs(LARGE_INTEGER start, LARGE_INTEGER end) {
     return ((end.QuadPart - start.QuadPart) * 1000000LL) / frequency.QuadPart;
 }
 
+// Signed variant: negative when t precedes anchor (e.g. a timer already
+// running before the click).
+static long long QpcRelUs(LARGE_INTEGER anchor, LARGE_INTEGER t) {
+    return t.QuadPart >= anchor.QuadPart ? QpcElapsedUs(anchor, t)
+                                         : -QpcElapsedUs(t, anchor);
+}
+
 static bool TryReadEngineLoadState(EngineLoadStateSnapshot& snapshot) {
     __try {
         int root = *(int*)0x00a1b4a4;
@@ -636,6 +643,361 @@ static bool IsLoadingClass(unsigned char cls) {
 
 static void ArmVisualLoad(unsigned int id, LARGE_INTEGER now);
 
+// ---------------------------------------------------------------------------
+// Load-phase attribution (log only, no behaviour change).  See load_phases.md.
+//
+// The pixel timeline says HOW LONG each visible stretch lasted; these engine
+// event hooks say WHY.  Every event is stamped on the same QPC clock as the
+// visual timeline and the summary is emitted from EmitVisualLoad, so the two
+// can be cross-checked line for line.  The window is the visual-load window
+// (armed at the click / state activation, closed at first gameplay frames).
+//
+// Hot-path rule: the per-tick hook (0x00537590) runs for every server tick of
+// the whole session.  Outside a window it is a flag test and a forward; inside
+// one it only bumps counters and fills fixed arrays -- no per-call Log().
+#define ENABLE_LOAD_PHASES_LOG 1
+#define LP_EVENT_MAX 128
+#define LP_TICK_MAX 64
+#define LP_MSG_MAX 64
+#define LP_GUI_FADE_MAX 16
+
+enum LpKind : unsigned char {
+    LP_FINALIZE_ENTER = 0,  // ModuleLoad_FinalizeAndQueueReady 0x0055a650
+    LP_FINALIZE_EXIT,
+    LP_ANNOUNCE,            // Server_SendStateToClient 0x00647af0; a = arg, b = inside State1to2
+    LP_NET_EVENT,           // HandleNetEvents 0x00812350; a = minor (first per minor only)
+    LP_STATE12_ENTER,       // Server_StartGame_State1to2 0x005361d0
+    LP_STATE12_EXIT,        // a = return value
+    LP_AREA_LOADED,         // Send_P_AreaLoaded_4_3 0x008798a0 (client says streaming finished)
+    LP_PLACE_ENTER,         // Server_PlacePlayerInArea 0x00535a10; b = inside State1to2
+    LP_PLACE_EXIT,
+    LP_SCRIPT_FADE_OUT,     // SetGlobalFadeOut 0x00696b00 (stamped on entry)
+    LP_SCRIPT_FADE_IN,      // SetGlobalFadeIn 0x006969e0 (stamped on entry)
+    LP_SCRIPT_FADE_UNTIL,   // SetFadeUntilScript 0x00699db0
+    LP_GUI_FADE,            // CSWGuiFade_SetTransitionState; a = mode, c = raw progress, f1 = progress s, f2 = duration s
+    LP_PROGRESS,            // Server_WriteAreaLoadProgressW 0x0063cee0; a = stage, b = total, c = flag
+};
+
+static const char* LpKindName(unsigned char kind) {
+    switch (kind) {
+        case LP_FINALIZE_ENTER: return "finalize_enter";
+        case LP_FINALIZE_EXIT: return "finalize_exit";
+        case LP_ANNOUNCE: return "announce";
+        case LP_NET_EVENT: return "net_event";
+        case LP_STATE12_ENTER: return "state12_enter";
+        case LP_STATE12_EXIT: return "state12_exit";
+        case LP_AREA_LOADED: return "area_loaded";
+        case LP_PLACE_ENTER: return "place_enter";
+        case LP_PLACE_EXIT: return "place_exit";
+        case LP_SCRIPT_FADE_OUT: return "script_fade_out";
+        case LP_SCRIPT_FADE_IN: return "script_fade_in";
+        case LP_SCRIPT_FADE_UNTIL: return "script_fade_until";
+        case LP_GUI_FADE: return "gui_fade";
+        case LP_PROGRESS: return "progress";
+        default: return "?";
+    }
+}
+
+// Tick/message accounting is bucketed by where the load is in the handshake:
+//   0 before finalize (ignored)   1 finalize..server-running (handshake)
+//   2 server-running..area-loaded (streaming; the throttle-paced part)
+//   3 after the client's area-loaded ack (post; counted, not summarized)
+#define LP_PHASES 4
+
+struct LpEvent {
+    LARGE_INTEGER qpc;
+    unsigned char kind;
+    unsigned char phase;
+    int a, b, c;
+    float f1, f2;
+};
+struct LpTick {  // one SENT tick (a tick the throttle let through)
+    LARGE_INTEGER qpc;
+    unsigned int durUs;
+    unsigned int heldBefore;  // held ticks since the previous sent tick
+    unsigned char phase;
+};
+struct LpMsg {  // one 2000-byte-capped object-update message build
+    LARGE_INTEGER qpc;
+    unsigned int durUs;
+    unsigned int bytes;
+    unsigned int getCalls;
+    unsigned char phase;
+};
+struct LpTickCounts {
+    unsigned int calls, sent, held, forced;
+    long long sentUs;
+};
+struct LoadPhaseTracker {
+    bool active;
+    DWORD ownerThreadId;
+    unsigned int id;
+    int phase;
+    unsigned int netSeen;  // bitmask of HandleNetEvents minors already logged
+    unsigned int heldSincePrevSent;
+    unsigned int guiFadeEvents;
+    unsigned int eventCount;  // total, including drops past LP_EVENT_MAX
+    unsigned int tickListCount;
+    unsigned int msgListCount;
+    LpTickCounts ticks[LP_PHASES];
+    unsigned int msgs[LP_PHASES];
+    long long msgBytes[LP_PHASES];
+    long long msgUs[LP_PHASES];
+    LpEvent events[LP_EVENT_MAX];
+    LpTick tickList[LP_TICK_MAX];
+    LpMsg msgList[LP_MSG_MAX];
+};
+static LoadPhaseTracker g_lp = {};
+static thread_local int g_lpBuildDepth = 0;    // inside Server_BuildClientObjectUpdate
+static thread_local int g_lpState12Depth = 0;  // inside Server_StartGame_State1to2
+static thread_local unsigned int g_lpCurMsgBytes = 0;
+static thread_local unsigned int g_lpCurMsgGets = 0;
+
+static bool LpActive() {
+    return g_lp.active && g_lp.ownerThreadId == GetCurrentThreadId();
+}
+
+static void LpArm(unsigned int id) {
+    // A re-arm while a window is still open is the same load: the perceived-load
+    // tracker ends and restarts on short state-activation transitions inside one
+    // load (seen on the main-menu load: 10 windows), and resetting here wiped the
+    // finalize/handshake/stream events.  EmitVisualLoad("rearmed") does not
+    // emit or close the phase window; only the final emit does.
+    if (g_lp.active) {
+        g_lp.id = id;
+        return;
+    }
+    g_lp = {};
+    g_lp.active = true;
+    g_lp.ownerThreadId = GetCurrentThreadId();
+    g_lp.id = id;
+}
+
+static void LpPushAt(LARGE_INTEGER qpc, unsigned char kind, int a = 0, int b = 0,
+                     int c = 0, float f1 = 0.0f, float f2 = 0.0f) {
+    if (kind == LP_FINALIZE_ENTER && g_lp.phase < 1) {
+        g_lp.phase = 1;
+    } else if (kind == LP_STATE12_EXIT && g_lp.phase < 2) {
+        g_lp.phase = 2;
+    } else if (kind == LP_AREA_LOADED) {
+        g_lp.phase = 3;
+    }
+    if (g_lp.eventCount < LP_EVENT_MAX) {
+        LpEvent& e = g_lp.events[g_lp.eventCount];
+        e.qpc = qpc;
+        e.kind = kind;
+        e.phase = (unsigned char)g_lp.phase;
+        e.a = a;
+        e.b = b;
+        e.c = c;
+        e.f1 = f1;
+        e.f2 = f2;
+    }
+    ++g_lp.eventCount;
+}
+
+static void LpPush(unsigned char kind, int a = 0, int b = 0, int c = 0,
+                   float f1 = 0.0f, float f2 = 0.0f) {
+    LARGE_INTEGER now = {};
+    QueryPerformanceCounter(&now);
+    LpPushAt(now, kind, a, b, c, f1, f2);
+}
+
+static void EmitLoadPhases(unsigned int id, LARGE_INTEGER t0, long long vlFirstLoadingUs,
+                           long long vlFirstBlackUs, long long vlFirstGameplayUs,
+                           long long vlTotalUs) {
+    if (!g_lp.active) {
+        return;
+    }
+    const unsigned int n = g_lp.eventCount < LP_EVENT_MAX ? g_lp.eventCount : LP_EVENT_MAX;
+    auto find = [&](unsigned char kind, long long minQpc) -> const LpEvent* {
+        for (unsigned int i = 0; i < n; ++i) {
+            if (g_lp.events[i].kind == kind && g_lp.events[i].qpc.QuadPart >= minQpc) {
+                return &g_lp.events[i];
+            }
+        }
+        return nullptr;
+    };
+    auto off = [&](const LpEvent* e) -> long long {
+        return e ? QpcRelUs(t0, e->qpc) : -1;
+    };
+    auto span = [&](const LpEvent* from, const LpEvent* to) -> long long {
+        return (from && to) ? QpcElapsedUs(from->qpc, to->qpc) : -1;
+    };
+    const LpEvent* finEnter = find(LP_FINALIZE_ENTER, 0);
+    const LpEvent* finExit = find(LP_FINALIZE_EXIT, 0);
+    const LpEvent* announce = find(LP_ANNOUNCE, 0);
+    const LpEvent* st12Enter = find(LP_STATE12_ENTER, 0);
+    const LpEvent* st12Exit = find(LP_STATE12_EXIT, 0);
+    const LpEvent* areaLoaded = find(LP_AREA_LOADED, 0);
+    // The OnEnter-queueing placement is the one after the client's ack; the
+    // one inside State1to2 (if any) is the pre-stream placement.
+    const LpEvent* place = find(LP_PLACE_ENTER, areaLoaded ? areaLoaded->qpc.QuadPart : 0);
+    const long long placeMin = place ? place->qpc.QuadPart : 0;
+    const LpEvent* fadeOut = find(LP_SCRIPT_FADE_OUT, placeMin);
+    const LpEvent* fadeIn = find(LP_SCRIPT_FADE_IN, placeMin);
+    const LpEvent* fadeUntil = find(LP_SCRIPT_FADE_UNTIL, placeMin);
+    const LpEvent* guiFade = fadeIn ? find(LP_GUI_FADE, fadeIn->qpc.QuadPart) : nullptr;
+    const LpEvent* net[4] = {};
+    for (unsigned int i = 0; i < n; ++i) {
+        if (g_lp.events[i].kind == LP_NET_EVENT && g_lp.events[i].a >= 1 &&
+            g_lp.events[i].a <= 3 && net[g_lp.events[i].a] == nullptr) {
+            net[g_lp.events[i].a] = &g_lp.events[i];
+        }
+    }
+    const LpEvent* lastProgress = nullptr;
+    for (unsigned int i = 0; i < n; ++i) {
+        if (g_lp.events[i].kind == LP_PROGRESS) {
+            lastProgress = &g_lp.events[i];
+        }
+    }
+
+    // Phase durations.  Streaming starts when the server is running; if the
+    // State1to2 exit was not seen, fall back to the finalize exit.
+    const LpEvent* streamFrom = st12Exit ? st12Exit : finExit;
+    const long long workUs = finExit ? QpcRelUs(t0, finExit->qpc) : -1;
+    const long long finalizeUs = span(finEnter, finExit);
+    const long long handshakeUs = span(finExit, st12Exit);
+    const long long streamUs = span(streamFrom, areaLoaded);
+    const LpTickCounts& hs = g_lp.ticks[1];
+    const LpTickCounts& st = g_lp.ticks[2];
+    // Time inside the stream window NOT spent in a send tick: the throttle's
+    // dead time (approximate -- main-thread rendering also lives here).
+    const long long throttleWaitUs = streamUs >= 0
+        ? (streamUs > st.sentUs ? streamUs - st.sentUs : 0) : -1;
+    long long gapSum = 0;
+    unsigned int gapN = 0;
+    const unsigned int tickN = g_lp.tickListCount < LP_TICK_MAX ? g_lp.tickListCount : LP_TICK_MAX;
+    const LpTick* prevSent = nullptr;
+    for (unsigned int i = 0; i < tickN; ++i) {
+        const LpTick& tk = g_lp.tickList[i];
+        if (tk.phase != 2) {
+            continue;
+        }
+        if (prevSent) {
+            gapSum += QpcElapsedUs(prevSent->qpc, tk.qpc);
+            ++gapN;
+        }
+        prevSent = &tk;
+    }
+    const long long areaToOnEnterUs = span(areaLoaded, place);
+    // Script hold: OnEnter queue -> SetGlobalFadeIn call (the script's own
+    // DelayCommand) plus the fade's wait (progress) once the fade starts.
+    const long long scriptDelayUs = span(fadeOut ? fadeOut : place, fadeIn);
+    const float fadeHoldS = guiFade ? guiFade->f1 : 0.0f;
+    const float fadeS = guiFade ? guiFade->f2 : 0.0f;
+    long long scriptHoldUs = -1;
+    if (place && fadeIn) {
+        scriptHoldUs = QpcElapsedUs(place->qpc, fadeIn->qpc) +
+                       (long long)(fadeHoldS * 1000000.0f);
+    }
+    const long long placeUs = off(place);
+    const long long placeToGameplayUs =
+        (place && vlFirstGameplayUs >= 0) ? vlFirstGameplayUs - placeUs : -1;
+    // The visual timeline's "first gameplay frame" is the first frame bright
+    // enough to leave the black class, i.e. the START of the fade-in, so the
+    // fade's own duration is NOT part of place-to-gameplay.
+    long long residualUs = -1;
+    if (placeToGameplayUs >= 0 && scriptHoldUs >= 0) {
+        residualUs = placeToGameplayUs - scriptHoldUs;
+    }
+
+    std::string line = "LoadPhases: run_id=" + std::to_string(g_profilerRunId) +
+        " id=" + std::to_string(id);
+    auto kv = [&](const char* k, long long v) {
+        line += std::string(" ") + k + "=" + std::to_string(v);
+    };
+    char fbuf[32];
+    auto kvf = [&](const char* k, float v) {
+        sprintf_s(fbuf, sizeof(fbuf), "%.3f", v);
+        line += std::string(" ") + k + "=" + fbuf;
+    };
+    kv("work_us", workUs);
+    kv("finalize_us", finalizeUs);
+    kv("handshake_us", handshakeUs);
+    kv("hs_ticks", hs.calls);
+    kv("hs_sent", hs.sent);
+    kv("hs_held", hs.held);
+    kv("stream_us", streamUs);
+    kv("throttle_wait_us", throttleWaitUs);
+    kv("stream_ticks", st.calls);
+    kv("stream_sent", st.sent);
+    kv("stream_held", st.held);
+    kv("stream_forced", st.forced);
+    kv("stream_send_work_us", st.sentUs);
+    kv("stream_msgs", g_lp.msgs[2]);
+    kv("stream_bytes", g_lp.msgBytes[2]);
+    kv("stream_build_us", g_lp.msgUs[2]);
+    kv("msg_gap_mean_us", gapN ? gapSum / gapN : -1);
+    kv("hs_msgs", g_lp.msgs[1]);
+    kv("post_ticks", g_lp.ticks[3].calls);
+    kv("post_msgs", g_lp.msgs[3]);
+    kv("area_to_onenter_us", areaToOnEnterUs);
+    kv("place_after_area", areaLoaded && place ? 1 : 0);
+    kv("place_in_state12", place ? place->b : -1);
+    kv("script_delay_us", scriptDelayUs);
+    kvf("fade_hold_s", fadeHoldS);
+    kvf("fade_s", fadeS);
+    kv("script_hold_us", scriptHoldUs);
+    kv("place_to_gameplay_us", placeToGameplayUs);
+    kv("residual_us", residualUs);
+    kv("vl_first_loading_us", vlFirstLoadingUs);
+    kv("vl_first_black_us", vlFirstBlackUs);
+    kv("vl_first_gameplay_us", vlFirstGameplayUs);
+    kv("vl_total_us", vlTotalUs);
+    kv("events", g_lp.eventCount);
+    Log(line);
+
+    line = "LoadPhaseMarks: id=" + std::to_string(id);
+    kv("finalize_enter_us", off(finEnter));
+    kv("finalize_exit_us", off(finExit));
+    kv("announce_us", off(announce));
+    kv("net1_us", off(net[1]));
+    kv("net2_us", off(net[2]));
+    kv("net3_us", off(net[3]));
+    kv("state12_enter_us", off(st12Enter));
+    kv("state12_exit_us", off(st12Exit));
+    kv("area_loaded_us", off(areaLoaded));
+    kv("place_us", placeUs);
+    kv("fade_out_us", off(fadeOut));
+    kv("fade_in_us", off(fadeIn));
+    kv("fade_until_us", off(fadeUntil));
+    kv("last_progress_stage", lastProgress ? lastProgress->a : -1);
+    kv("last_progress_total", lastProgress ? lastProgress->b : -1);
+    Log(line);
+
+    // Chronological raw events (capped) so every derived number is checkable.
+    for (unsigned int i = 0; i < n && i < 96; ++i) {
+        const LpEvent& e = g_lp.events[i];
+        char buf[224];
+        sprintf_s(buf, sizeof(buf),
+            "LoadPhaseEvent: id=%u n=%u kind=%s at_us=%lld phase=%u a=%d b=%d c=%d f1=%.3f f2=%.3f",
+            id, i, LpKindName(e.kind), QpcRelUs(t0, e.qpc), (unsigned)e.phase,
+            e.a, e.b, e.c, e.f1, e.f2);
+        Log(buf);
+    }
+    // One line per message build and per SENT tick; held ticks appear only as
+    // the count between sent ticks.
+    const unsigned int msgN = g_lp.msgListCount < LP_MSG_MAX ? g_lp.msgListCount : LP_MSG_MAX;
+    for (unsigned int i = 0; i < msgN; ++i) {
+        const LpMsg& m = g_lp.msgList[i];
+        char buf[192];
+        sprintf_s(buf, sizeof(buf),
+            "LoadPhaseMsg: id=%u n=%u at_us=%lld phase=%u dur_us=%u bytes=%u get_calls=%u",
+            id, i, QpcRelUs(t0, m.qpc), (unsigned)m.phase, m.durUs, m.bytes, m.getCalls);
+        Log(buf);
+    }
+    for (unsigned int i = 0; i < tickN; ++i) {
+        const LpTick& tk = g_lp.tickList[i];
+        char buf[192];
+        sprintf_s(buf, sizeof(buf),
+            "LoadPhaseTick: id=%u n=%u at_us=%lld phase=%u dur_us=%u held_before=%u",
+            id, i, QpcRelUs(t0, tk.qpc), (unsigned)tk.phase, tk.durUs, tk.heldBefore);
+        Log(buf);
+    }
+    g_lp.active = false;
+}
+
 static void EmitVisualLoad(LARGE_INTEGER now, const char* endReason) {
     VisualLoadTracker t = g_visualLoad;
     g_visualLoad = {};
@@ -810,6 +1172,11 @@ static void EmitVisualLoad(LARGE_INTEGER now, const char* endReason) {
         ++runNo;
         i = j;
     }
+#if ENABLE_LOAD_PHASES_LOG
+    if (std::strcmp(endReason, "rearmed") != 0) {
+        EmitLoadPhases(t.id, t0, firstLoadingUs, firstBlackUs, firstGameplayUs, totalUs);
+    }
+#endif
 }
 
 static void ArmVisualLoad(unsigned int id, LARGE_INTEGER now) {
@@ -821,6 +1188,9 @@ static void ArmVisualLoad(unsigned int id, LARGE_INTEGER now) {
     g_visualLoad.id = id;
     g_visualLoad.armed = now;
     g_visualLoad.armRingIndex = g_vlRingWrite;
+#if ENABLE_LOAD_PHASES_LOG
+    LpArm(id);
+#endif
 }
 
 // Called from Hook_SwapBuffers BEFORE the original SwapBuffers so the sampled
@@ -1226,6 +1596,282 @@ void __fastcall Hook_GameSaveLoadCore(
             " " + std::to_string(durationUs) + " us");
     }
 }
+
+#if ENABLE_LOAD_PHASES_LOG
+// Load-phase hooks (log only).  Conventions were read from each function's
+// prologue and RET in Ghidra (2026-09-24); a wrong arity corrupts the caller's
+// stack, so the stack-arg counts below are the verified RET immediates:
+//   0x0055a650 RET          0x00647af0 RET 4     0x005361d0 RET
+//   0x00537590 RET 0x10     0x0063caa0 RET 8 (2 stack args, NOT 1)
+//   0x0063cee0 RET 0x10     0x008798a0 RET       0x00535a10 RET 4
+//   0x00812350 RET 4        0x00696b00/0x006969e0/0x00699db0 RET 8
+//   0x005e47e0 RET 8 (out-params: data ptr, size)
+// Every detour forwards all args and returns the original's EAX untouched.
+struct LpDepthGuard {
+    int& depth;
+    explicit LpDepthGuard(int& d) : depth(d) { ++depth; }
+    ~LpDepthGuard() { --depth; }
+};
+
+typedef uint32_t (__thiscall* LpThis0Ptr_t)(void* thisPtr);
+typedef uint32_t (__thiscall* LpThis1Ptr_t)(void* thisPtr, uint32_t a1);
+typedef uint32_t (__thiscall* LpThis2Ptr_t)(void* thisPtr, uint32_t a1, uint32_t a2);
+typedef uint32_t (__thiscall* LpThis4Ptr_t)(void* thisPtr, uint32_t a1, uint32_t a2,
+                                             uint32_t a3, uint32_t a4);
+
+static LpThis0Ptr_t g_lpOrigFinalize = nullptr;
+static LpThis1Ptr_t g_lpOrigAnnounce = nullptr;
+static LpThis1Ptr_t g_lpOrigNetEvents = nullptr;
+static LpThis0Ptr_t g_lpOrigState12 = nullptr;
+static LpThis4Ptr_t g_lpOrigTick = nullptr;
+static LpThis2Ptr_t g_lpOrigBuildUpdate = nullptr;
+static LpThis2Ptr_t g_lpOrigGetWriteMessage = nullptr;
+static LpThis4Ptr_t g_lpOrigProgress = nullptr;
+static LpThis0Ptr_t g_lpOrigAreaLoaded = nullptr;
+static LpThis1Ptr_t g_lpOrigPlace = nullptr;
+static LpThis2Ptr_t g_lpOrigFadeOut = nullptr;
+static LpThis2Ptr_t g_lpOrigFadeIn = nullptr;
+static LpThis2Ptr_t g_lpOrigFadeUntil = nullptr;
+
+uint32_t __fastcall Hook_LpFinalize(void* thisPtr, void* edx) {
+    if (!LpActive()) {
+        return g_lpOrigFinalize(thisPtr);
+    }
+    LpPush(LP_FINALIZE_ENTER);
+    uint32_t r = g_lpOrigFinalize(thisPtr);
+    LpPush(LP_FINALIZE_EXIT);
+    return r;
+}
+
+uint32_t __fastcall Hook_LpAnnounce(void* thisPtr, void* edx, uint32_t arg) {
+    if (LpActive()) {
+        LpPush(LP_ANNOUNCE, (int)arg, g_lpState12Depth > 0 ? 1 : 0);
+    }
+    return g_lpOrigAnnounce(thisPtr, arg);
+}
+
+// The engine's Module.Run reply lands here; only the first hit per minor is
+// kept so a chatty handler cannot flood the event buffer.
+uint32_t __fastcall Hook_LpNetEvents(void* thisPtr, void* edx, uint32_t minorArg) {
+    if (LpActive()) {
+        unsigned int minor = minorArg & 0xff;
+        if (minor < 32 && (g_lp.netSeen & (1u << minor)) == 0) {
+            g_lp.netSeen |= 1u << minor;
+            LpPush(LP_NET_EVENT, (int)minor);
+        }
+    }
+    return g_lpOrigNetEvents(thisPtr, minorArg);
+}
+
+uint32_t __fastcall Hook_LpState12(void* thisPtr, void* edx) {
+    if (!LpActive()) {
+        return g_lpOrigState12(thisPtr);
+    }
+    LpPush(LP_STATE12_ENTER);
+    uint32_t r;
+    {
+        LpDepthGuard guard(g_lpState12Depth);
+        r = g_lpOrigState12(thisPtr);
+    }
+    LpPush(LP_STATE12_EXIT, (int)r);
+    return r;
+}
+
+// Reads the throttle stamp (player+0x2c/+0x30) that the engine rewrites only
+// when the tick passes the 200 ms gate (0x00537723); unchanged == held back
+// (or an early-out for a player that is not yet updatable -- both mean "no
+// message from this tick", which is what the throttle-wait number needs).
+static bool LpReadThrottleStamp(void* player, unsigned long long& out) {
+    if (player == nullptr) {
+        return false;
+    }
+    __try {
+        unsigned int lo = *(unsigned int*)((char*)player + 0x2c);
+        unsigned int hi = *(unsigned int*)((char*)player + 0x30);
+        out = ((unsigned long long)hi << 32) | lo;
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+uint32_t __fastcall Hook_LpUpdateClient(
+    void* thisPtr, void* edx, uint32_t player, uint32_t force, uint32_t timeLo,
+    uint32_t timeHi) {
+    // Fast path for the ~whole session: no window, or the load has not reached
+    // finalize yet.
+    if (!g_lp.active || g_lp.phase == 0 || !LpActive()) {
+        return g_lpOrigTick(thisPtr, player, force, timeLo, timeHi);
+    }
+    unsigned long long before = 0, after = 0;
+    const bool haveBefore = LpReadThrottleStamp((void*)player, before);
+    LARGE_INTEGER t0 = {}, t1 = {};
+    QueryPerformanceCounter(&t0);
+    uint32_t r = g_lpOrigTick(thisPtr, player, force, timeLo, timeHi);
+    QueryPerformanceCounter(&t1);
+    const bool haveAfter = LpReadThrottleStamp((void*)player, after);
+    const bool sent = haveBefore && haveAfter && before != after;
+    const int phase = g_lp.phase;
+    const long long durUs = QpcElapsedUs(t0, t1);
+    LpTickCounts& c = g_lp.ticks[phase];
+    ++c.calls;
+    c.forced += force == 1 ? 1 : 0;
+    if (sent) {
+        ++c.sent;
+        c.sentUs += durUs;
+        if (g_lp.tickListCount < LP_TICK_MAX) {
+            LpTick& tk = g_lp.tickList[g_lp.tickListCount];
+            tk.qpc = t0;
+            tk.durUs = (unsigned int)durUs;
+            tk.heldBefore = g_lp.heldSincePrevSent;
+            tk.phase = (unsigned char)phase;
+        }
+        ++g_lp.tickListCount;
+        g_lp.heldSincePrevSent = 0;
+    } else {
+        ++c.held;
+        ++g_lp.heldSincePrevSent;
+    }
+    return r;
+}
+
+// One call == one message build (up to 2000 bytes, 14 stages).  Bytes come
+// from the out-param of the buffer accessor the builder calls right before it
+// sends (hooked below; only counted while a build is in flight).
+uint32_t __fastcall Hook_LpBuildUpdate(void* thisPtr, void* edx, uint32_t a1, uint32_t a2) {
+    if (!g_lp.active || g_lp.phase == 0 || !LpActive()) {
+        return g_lpOrigBuildUpdate(thisPtr, a1, a2);
+    }
+    g_lpCurMsgBytes = 0;
+    g_lpCurMsgGets = 0;
+    LARGE_INTEGER t0 = {}, t1 = {};
+    QueryPerformanceCounter(&t0);
+    uint32_t r;
+    {
+        LpDepthGuard guard(g_lpBuildDepth);
+        r = g_lpOrigBuildUpdate(thisPtr, a1, a2);
+    }
+    QueryPerformanceCounter(&t1);
+    const int phase = g_lp.phase;
+    const long long durUs = QpcElapsedUs(t0, t1);
+    ++g_lp.msgs[phase];
+    g_lp.msgBytes[phase] += g_lpCurMsgBytes;
+    g_lp.msgUs[phase] += durUs;
+    if (g_lp.msgListCount < LP_MSG_MAX) {
+        LpMsg& m = g_lp.msgList[g_lp.msgListCount];
+        m.qpc = t0;
+        m.durUs = (unsigned int)durUs;
+        m.bytes = g_lpCurMsgBytes;
+        m.getCalls = g_lpCurMsgGets;
+        m.phase = (unsigned char)phase;
+    }
+    ++g_lp.msgListCount;
+    return r;
+}
+
+uint32_t __fastcall Hook_LpGetWriteMessage(
+    void* thisPtr, void* edx, uint32_t dataOut, uint32_t sizeOut) {
+    uint32_t r = g_lpOrigGetWriteMessage(thisPtr, dataOut, sizeOut);
+    if (g_lpBuildDepth > 0 && sizeOut != 0) {
+        g_lpCurMsgBytes += *(uint32_t*)sizeOut;
+        ++g_lpCurMsgGets;
+    }
+    return r;
+}
+
+// 'W' load-bar message: stage/total is the engine's real load progress (x/14).
+uint32_t __fastcall Hook_LpProgress(
+    void* thisPtr, void* edx, uint32_t obj, uint32_t flag, uint32_t stage, uint32_t total) {
+    if (LpActive() && g_lp.phase != 0) {
+        LpPush(LP_PROGRESS, (int)stage, (int)total, (int)flag);
+    }
+    return g_lpOrigProgress(thisPtr, obj, flag, stage, total);
+}
+
+uint32_t __fastcall Hook_LpAreaLoaded(void* thisPtr, void* edx) {
+    if (LpActive()) {
+        LpPush(LP_AREA_LOADED);
+    }
+    return g_lpOrigAreaLoaded(thisPtr);
+}
+
+uint32_t __fastcall Hook_LpPlace(void* thisPtr, void* edx, uint32_t player) {
+    if (!LpActive()) {
+        return g_lpOrigPlace(thisPtr, player);
+    }
+    LpPush(LP_PLACE_ENTER, 0, g_lpState12Depth > 0 ? 1 : 0);
+    uint32_t r = g_lpOrigPlace(thisPtr, player);
+    LpPush(LP_PLACE_EXIT);
+    return r;
+}
+
+// NWScript command handlers: (this, nCommand, nParams).  Stamped on ENTRY: the
+// handler itself starts the GUI fade (CSWGuiFade_SetTransitionState), so a
+// stamp taken after it returns lands after the fade event it caused and the
+// summary's "first fade at or after fade-in" search would miss it.
+#define LP_SCRIPT_FADE_HOOK(NAME, ORIG, KIND)                                        \
+    uint32_t __fastcall NAME(void* thisPtr, void* edx, uint32_t cmd, uint32_t params) { \
+        if (LpActive()) {                                                            \
+            LpPush(KIND);                                                            \
+        }                                                                            \
+        return ORIG(thisPtr, cmd, params);                                           \
+    }
+LP_SCRIPT_FADE_HOOK(Hook_LpFadeOut, g_lpOrigFadeOut, LP_SCRIPT_FADE_OUT)
+LP_SCRIPT_FADE_HOOK(Hook_LpFadeIn, g_lpOrigFadeIn, LP_SCRIPT_FADE_IN)
+LP_SCRIPT_FADE_HOOK(Hook_LpFadeUntil, g_lpOrigFadeUntil, LP_SCRIPT_FADE_UNTIL)
+
+// Both are defined with the other hook-install helpers further down.
+static bool InstallCheckedHook(DWORD address, LPVOID detour, LPVOID* original, const char* name);
+static bool MatchesExecutableBytes(DWORD address, const BYTE* expected, size_t length);
+
+// Each phase hook is signature-checked on its own and skipped (with a log
+// line) on mismatch, so a bad address costs one log row instead of the whole
+// mod: the global IsSupportedSteamExecutable gate is all-or-nothing.
+static void InstallLoadPhaseHook(
+    DWORD address, const BYTE* sig, size_t sigLen, LPVOID detour, LPVOID* original,
+    const char* name) {
+    if (!MatchesExecutableBytes(address, sig, sigLen)) {
+        Log(std::string("LoadPhases: signature mismatch, hook skipped: ") + name);
+        return;
+    }
+    InstallCheckedHook(address, detour, original, name);
+}
+
+static void InstallLoadPhaseHooks() {
+    // 55 8b ec + (6a ff 68 <seh>) | (83 ec <n>) | (51): the prologue pattern
+    // each function was verified against.
+    static const BYTE sigFinalize[] = {0x55,0x8b,0xec,0x6a,0xff,0x68,0x5b,0x7b,0x95,0x00};
+    static const BYTE sigAnnounce[] = {0x55,0x8b,0xec,0x83,0xec,0x10};
+    static const BYTE sigState12[] = {0x55,0x8b,0xec,0x6a,0xff,0x68,0xe8,0xec,0x94,0x00};
+    static const BYTE sigTick[] = {0x55,0x8b,0xec,0x83,0xec,0x54};
+    static const BYTE sigBuild[] = {0x55,0x8b,0xec,0x83,0xec,0x74};
+    static const BYTE sigProgress[] = {0x55,0x8b,0xec,0x83,0xec,0x10};
+    static const BYTE sigAreaLoaded[] = {0x55,0x8b,0xec,0x51};
+    static const BYTE sigPlace[] = {0x55,0x8b,0xec,0x83,0xec,0x48};
+    static const BYTE sigNetEvents[] = {0x55,0x8b,0xec,0x6a,0xff,0x68,0xf8,0xce,0x96,0x00};
+    static const BYTE sigFadeOut[] = {0x55,0x8b,0xec,0x83,0xec,0x34};
+    static const BYTE sigFadeIn[] = {0x55,0x8b,0xec,0x83,0xec,0x3c};
+    static const BYTE sigFadeUntil[] = {0x55,0x8b,0xec,0x83,0xec,0x0c};
+    static const BYTE sigGetWrite[] = {0x55,0x8b,0xec,0x83,0xec,0x0c};
+#define LP_INSTALL(ADDR, SIG, DETOUR, ORIG, NAME) \
+    InstallLoadPhaseHook(ADDR, SIG, sizeof(SIG), (LPVOID)&DETOUR, (LPVOID*)&ORIG, NAME)
+    LP_INSTALL(0x0055a650, sigFinalize, Hook_LpFinalize, g_lpOrigFinalize, "LP_ModuleLoad_FinalizeAndQueueReady");
+    LP_INSTALL(0x00647af0, sigAnnounce, Hook_LpAnnounce, g_lpOrigAnnounce, "LP_Server_SendStateToClient");
+    LP_INSTALL(0x00812350, sigNetEvents, Hook_LpNetEvents, g_lpOrigNetEvents, "LP_HandleNetEvents");
+    LP_INSTALL(0x005361d0, sigState12, Hook_LpState12, g_lpOrigState12, "LP_Server_StartGame_State1to2");
+    LP_INSTALL(0x00537590, sigTick, Hook_LpUpdateClient, g_lpOrigTick, "LP_Server_UpdateClient_Throttle200ms");
+    LP_INSTALL(0x0063caa0, sigBuild, Hook_LpBuildUpdate, g_lpOrigBuildUpdate, "LP_Server_BuildClientObjectUpdate");
+    LP_INSTALL(0x005e47e0, sigGetWrite, Hook_LpGetWriteMessage, g_lpOrigGetWriteMessage, "LP_Message_GetWriteMessage");
+    LP_INSTALL(0x0063cee0, sigProgress, Hook_LpProgress, g_lpOrigProgress, "LP_Server_WriteAreaLoadProgressW");
+    LP_INSTALL(0x008798a0, sigAreaLoaded, Hook_LpAreaLoaded, g_lpOrigAreaLoaded, "LP_Send_P_AreaLoaded_4_3");
+    LP_INSTALL(0x00535a10, sigPlace, Hook_LpPlace, g_lpOrigPlace, "LP_Server_PlacePlayerInArea");
+    LP_INSTALL(0x00696b00, sigFadeOut, Hook_LpFadeOut, g_lpOrigFadeOut, "LP_SetGlobalFadeOut");
+    LP_INSTALL(0x006969e0, sigFadeIn, Hook_LpFadeIn, g_lpOrigFadeIn, "LP_SetGlobalFadeIn");
+    LP_INSTALL(0x00699db0, sigFadeUntil, Hook_LpFadeUntil, g_lpOrigFadeUntil, "LP_SetFadeUntilScript");
+#undef LP_INSTALL
+}
+#endif  // ENABLE_LOAD_PHASES_LOG
 
 // Save-list entry parser: the Load menu parses EVERY save file (GFF open,
 // ~20 field reads, portrait loads) each time the list is populated.  All of
@@ -2890,10 +3536,22 @@ void __fastcall Hook_CSWGuiFade_SetTransitionState(void* thisPtr, void* edx, int
     static_assert(sizeof(durationSeconds) == sizeof(duration),
         "fade duration bit-cast requires matching sizes");
     std::memcpy(&durationSeconds, &duration, sizeof(durationSeconds));
+    // progress is the same float-bits encoding; on a scripted fade-in it is the
+    // hold before the fade starts (1.0 s on 101PER).
+    float progressSeconds = 0.0f;
+    std::memcpy(&progressSeconds, &progress, sizeof(progressSeconds));
+#if ENABLE_LOAD_PHASES_LOG
+    if (LpActive() && g_lp.guiFadeEvents < LP_GUI_FADE_MAX) {
+        ++g_lp.guiFadeEvents;
+        LpPush(LP_GUI_FADE, mode, 0, (int)progress, progressSeconds, durationSeconds);
+    }
+#endif
     if (durationSeconds >= 0.25f) {
         Log("CSWGuiFadeLong: mode=" + std::to_string(mode) +
             " duration_raw=" + std::to_string(duration) +
-            " seconds=" + std::to_string(durationSeconds));
+            " seconds=" + std::to_string(durationSeconds) +
+            " progress_raw=" + std::to_string(progress) +
+            " progress_seconds=" + std::to_string(progressSeconds));
 #if ENABLE_VISUAL_LOAD_TIMELINE
         // Stamp the raw (pre-clamp) fade into the visual timeline: its offset
         // from the visual phases shows whether a fade is gating the visible
@@ -4370,7 +5028,8 @@ static void InstallPerformanceHooks() {
         " present_throttle=" + std::to_string(THROTTLE_LOADING_SCREEN_PRESENTS) +
         " skip_debug_gui=" + std::to_string(SKIP_DEBUG_GUI_CONSTRUCTION) +
         " defer_ingame_tabs=" + std::to_string(DEFER_INGAME_TAB_CONSTRUCTION) +
-        " clamp_long_fades=" + std::to_string(CLAMP_LONG_FADES));
+        " clamp_long_fades=" + std::to_string(CLAMP_LONG_FADES) +
+        " load_phases_log=" + std::to_string(ENABLE_LOAD_PHASES_LOG));
 #if SKIP_PRELOAD_INITIAL_ASSETS_WRAPPER
     InstallCheckedHook(0x0073f050, (LPVOID)&Hook_PreloadInitialAssetsWrapper,
         (LPVOID*)&g_originalPreloadInitialAssetsWrapperPtr, "PreloadInitialAssetsWrapper");
@@ -4442,6 +5101,12 @@ static void InstallPerformanceHooks() {
     // the CClientExoApp object graph or any engine ownership state.
     bool moduleChunkHookReady = InstallCheckedHook(0x007be4c0, (LPVOID)&Hook_ModuleChunkLoadCore,
         (LPVOID*)&g_originalModuleChunkLoadCore, "ModuleChunkLoadCore");
+
+    // Load-phase attribution (log only): engine events that split a reload
+    // into work / handshake / throttle wait / scripted hold.  See load_phases.md.
+#if ENABLE_LOAD_PHASES_LOG
+    InstallLoadPhaseHooks();
+#endif
 
     InstallCheckedHook(0x00409ed0, (LPVOID)&Hook_LoadingScreenUpdateFrame,
         (LPVOID*)&g_originalLoadingScreenUpdateFrame, "LoadingScreenUpdateFrame");

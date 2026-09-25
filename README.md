@@ -134,7 +134,9 @@ Just copy the `dinput8.dll` into the same directory as your swkotor2.exe
 |`FUN_0052f610` | **SaveGame** | Creates save game file | no |
 |`FUN_007DE110` | **CaptureScreenThumb** | Grabs current frame buffer, measures its brightness (skips totally dark frames), scales it to thumbnail size, and calls into the renderer to write out the 4-component pixel data | no |
 |`FUN_00704880` | **HandleBNPacket** | Checks a "BN…" packet to see if it's a BN-CS (decompress or verify data) or BN-CR (compile or initialize data) message—if so, calls the right specialized handler; otherwise it hands the packet off to the generic loader with a flag marking it as a BN packet. | yes |
-|`FUN_0073f050` | **PreloadInitialAssetsWrapper** | Wrapper to preload initial assets like the splash screen | no |
+|`FUN_0073f050` | **PreloadInitialAssetsWrapper** | Wrapper to preload initial assets like the splash screen. **Hooked by the mod (skip intros):** the call is turned into a no-op. | no |
+|`FUN_00537590` | **Server_UpdateClient_Throttle200ms** | Server-side per-player update that sends the client its area objects, at most one message every 200 ms unless its "force" flag is set. **Hooked by the mod (forced area streaming):** the force flag is set while the player's area is still loading (`player+0x24 == 1`), so one message goes out per frame. | yes |
+|`FUN_00484a60` | **GL_CanUseHardwareMipmapGen** | Startup check deciding whether textures get GPU-generated mipmaps or the CPU `gluBuild2DMipmaps` fallback. It rejects any driver with `GL_ARB_fragment_program`. **Hooked by the mod (GPU mipmap generation):** the result is forced to pass when the driver supports `GL_SGIS_generate_mipmap`. | yes |
 |`FUN_007813a0` | **PreloadInitialAssets** | Preloads initial assets like the splash screen | no |
 |`FUN_0073f230` | **PreloadAssetsWrapper** | Wrapper to preload assets | no |
 |`FUN_00781590` | **PreloadAssets** | Loads assets | no |

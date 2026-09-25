@@ -90,3 +90,38 @@ from this branch before they can be compared.** Only the stream phase is compare
 
 Game state after the reloads: nothing looked off in play (checked by hand, 2026-09-25).
 Not yet checked: a larger level.
+
+A second run the same night (run_id 115398065698256) repeated it: stream 0.548-0.583 s,
+10 forced ticks per load.
+
+## Remaining gaps: where the main thread is (instrumented 2026-09-25, not run yet)
+
+`GameMain` (0x00408120) does, per frame: `CClientExoApp_MainLoopTick` (client), then
+`loadingscreenwrapper` → `loadingscreen` (0x00533830, the server tick, which calls
+`Server_UpdateAllClients`), then `SwapBuffers`. With the force on, every server tick in
+the stream sends a message, so a stretch with **no** tick means `GameMain` is stuck inside
+one client tick. The loading screen keeps drawing because the client work calls
+`LoadingScreenUpdateFrame` (0x00409ed0) itself. That function runs the server tick only
+when its `runLoadingScreenWork` argument is 1, and it has ~50 call sites, including five
+in `ModuleChunkLoadCore` and one in `Client_OnAreaLoadProgressW`.
+
+New log-only instrumentation (`LP_SAMPLE_MAIN_THREAD`):
+
+- A side thread suspends the main thread about every 1 ms from finalize to the area-loaded
+  ack, and records EIP and up to 16 return addresses in the game image. It uses the EBP
+  chain, or a call-validated stack scan when the chain breaks inside a driver. Nothing is
+  allocated while the thread is suspended. Output: `LoadPhaseSamples:` (count plus total
+  suspended time) and one `LoadPhaseSample:` line per sample.
+- `modchunk_enter` / `modchunk_exit` events for the outermost `ModuleChunkLoadCore` call.
+- `python lp_samples.py [log]` splits the samples into handshake / gap1 / gap2 / rest and
+  lists the return addresses present in the most samples, to resolve in Ghidra.
+
+Prediction:
+
+- gap1 (~270 ms, server running → first message): `ModuleChunkLoadCore` (~258 ms per load
+  in the logs) runs inside it. `modchunk_enter`/`exit` bracket most of gap1, and most gap1
+  samples have a `ModuleChunkLoadCore` return address on the stack.
+- gap2 (~190 ms, message 0 → message 1): the client handling message 0 (stage 7, 2.2 KB).
+  Samples sit under the client's object-update handler, most likely loading models or
+  textures for the objects in that message, not in `ModuleChunkLoadCore`.
+- Sampling cost: `suspended_us` a few ms per load. The stream should stay about 0.55 s.

@@ -673,6 +673,14 @@ static void ArmVisualLoad(unsigned int id, LARGE_INTEGER now);
 #define LP_TICK_MAX 64
 #define LP_MSG_MAX 64
 #define LP_GUI_FADE_MAX 16
+// Main-thread stack sampler for the finalize..area-loaded window (log only).
+// With the stream forced, the remaining ~470 ms of it has stretches with no
+// server tick at all: GameMain is stuck inside one client tick while nested
+// LoadingScreenUpdateFrame(runLoadingScreenWork=0) calls keep presenting.  A
+// side thread suspends the main thread ~every 1 ms, records EIP plus return
+// addresses, and resumes it; nothing is allocated while it is suspended.
+// Addresses are resolved offline in Ghidra (lp_samples.py groups them).
+#define LP_SAMPLE_MAIN_THREAD 1
 
 enum LpKind : unsigned char {
     LP_FINALIZE_ENTER = 0,  // ModuleLoad_FinalizeAndQueueReady 0x0055a650
@@ -689,6 +697,8 @@ enum LpKind : unsigned char {
     LP_SCRIPT_FADE_UNTIL,   // SetFadeUntilScript 0x00699db0
     LP_GUI_FADE,            // CSWGuiFade_SetTransitionState; a = mode, c = raw progress, f1 = progress s, f2 = duration s
     LP_PROGRESS,            // Server_WriteAreaLoadProgressW 0x0063cee0; a = stage, b = total, c = flag
+    LP_MODCHUNK_ENTER,      // ModuleChunkLoadCore 0x007be4c0 (outermost call only)
+    LP_MODCHUNK_EXIT,       // a = return value
 };
 
 static const char* LpKindName(unsigned char kind) {
@@ -707,6 +717,8 @@ static const char* LpKindName(unsigned char kind) {
         case LP_SCRIPT_FADE_UNTIL: return "script_fade_until";
         case LP_GUI_FADE: return "gui_fade";
         case LP_PROGRESS: return "progress";
+        case LP_MODCHUNK_ENTER: return "modchunk_enter";
+        case LP_MODCHUNK_EXIT: return "modchunk_exit";
         default: return "?";
     }
 }
@@ -770,6 +782,170 @@ static bool LpActive() {
     return g_lp.active && g_lp.ownerThreadId == GetCurrentThreadId();
 }
 
+#if LP_SAMPLE_MAIN_THREAD
+#pragma comment(lib, "winmm.lib")
+#define LP_SAMPLE_MAX 2048
+#define LP_SAMPLE_FRAMES 16
+struct LpSample {
+    LARGE_INTEGER qpc;
+    unsigned int eip;
+    unsigned char phase;
+    unsigned char depth;
+    char method;  // 'b' = EBP chain, 's' = call-validated stack scan
+    unsigned int frames[LP_SAMPLE_FRAMES];
+};
+static LpSample g_lpSamples[LP_SAMPLE_MAX];
+static volatile LONG g_lpSampleCount = 0;
+static volatile LONG g_lpSampling = 0;
+static HANDLE g_lpSamplerWake = nullptr;
+static HANDLE g_lpSampleTarget = nullptr;
+static DWORD g_lpSampleTargetId = 0;
+static DWORD g_lpImageLo = 0, g_lpImageHi = 0;
+static long long g_lpSampleCostUs = 0;  // total time the main thread was held suspended
+
+static bool LpInImage(DWORD a) {
+    return a >= g_lpImageLo && a < g_lpImageHi;
+}
+
+// True when the bytes before `ret` are a CALL (E8 rel32, or FF /2 in its
+// 2/3/6/7-byte encodings), so a stack value is a real return address and not
+// a stale pointer into code.
+static bool LpLooksLikeReturn(DWORD ret) {
+    if (!LpInImage(ret) || ret < g_lpImageLo + 8) {
+        return false;
+    }
+    const BYTE* p = (const BYTE*)ret;
+    if (p[-5] == 0xE8) return true;
+    if (p[-2] == 0xFF && (p[-1] & 0x38) == 0x10) return true;
+    if (p[-3] == 0xFF && (p[-2] & 0x38) == 0x10) return true;
+    if (p[-6] == 0xFF && (p[-5] & 0x38) == 0x10) return true;
+    if (p[-7] == 0xFF && (p[-6] & 0x38) == 0x10) return true;
+    return false;
+}
+
+static void LpWalkStack(LpSample& s, DWORD esp, DWORD ebp) {
+    unsigned char depth = 0;
+    __try {
+        // EBP chain first: exact when every frame keeps a frame pointer.
+        DWORD fp = ebp;
+        while (depth < LP_SAMPLE_FRAMES && fp > esp && fp < esp + 0x100000 && (fp & 3) == 0) {
+            const DWORD next = ((DWORD*)fp)[0];
+            const DWORD ret = ((DWORD*)fp)[1];
+            if (!LpInImage(ret)) {
+                break;
+            }
+            s.frames[depth++] = ret;
+            if (next <= fp) {
+                break;
+            }
+            fp = next;
+        }
+        s.method = 'b';
+        // Inside a driver/system DLL (SwapBuffers, waits) the chain usually
+        // breaks at once; fall back to scanning for call-validated returns.
+        if (depth < 3) {
+            depth = 0;
+            s.method = 's';
+            for (DWORD a = esp; a < esp + 0x8000 && depth < LP_SAMPLE_FRAMES; a += 4) {
+                const DWORD v = *(DWORD*)a;
+                if (LpLooksLikeReturn(v)) {
+                    s.frames[depth++] = v;
+                }
+            }
+        }
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+    s.depth = depth;
+}
+
+static void LpTakeSample() {
+    const LONG n = g_lpSampleCount;
+    if (n >= LP_SAMPLE_MAX || g_lpSampleTarget == nullptr) {
+        return;
+    }
+    LpSample& s = g_lpSamples[n];
+    s = {};
+    LARGE_INTEGER t0 = {}, t1 = {};
+    QueryPerformanceCounter(&t0);
+    if (SuspendThread(g_lpSampleTarget) == (DWORD)-1) {
+        return;
+    }
+    CONTEXT ctx = {};
+    ctx.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER;
+    const bool ok = GetThreadContext(g_lpSampleTarget, &ctx) != 0;
+    if (ok) {
+        s.eip = ctx.Eip;
+        LpWalkStack(s, ctx.Esp, ctx.Ebp);
+    }
+    ResumeThread(g_lpSampleTarget);
+    QueryPerformanceCounter(&t1);
+    if (!ok) {
+        return;
+    }
+    s.qpc = t0;
+    s.phase = (unsigned char)g_lp.phase;
+    g_lpSampleCostUs += QpcElapsedUs(t0, t1);
+    InterlockedExchange(&g_lpSampleCount, n + 1);
+}
+
+static DWORD WINAPI LpSamplerProc(LPVOID) {
+    for (;;) {
+        WaitForSingleObject(g_lpSamplerWake, INFINITE);
+        timeBeginPeriod(1);
+        while (InterlockedCompareExchange(&g_lpSampling, 0, 0) != 0) {
+            LpTakeSample();
+            Sleep(1);
+        }
+        timeEndPeriod(1);
+    }
+}
+
+// Called on the main thread at finalize entry.
+static void LpSamplerStart() {
+    if (InterlockedCompareExchange(&g_lpSampling, 0, 0) != 0) {
+        return;
+    }
+    if (g_lpSamplerWake == nullptr) {
+        const BYTE* base = (const BYTE*)GetModuleHandleA(nullptr);
+        const IMAGE_NT_HEADERS* nt =
+            (const IMAGE_NT_HEADERS*)(base + ((const IMAGE_DOS_HEADER*)base)->e_lfanew);
+        g_lpImageLo = (DWORD)base;
+        g_lpImageHi = (DWORD)base + nt->OptionalHeader.SizeOfImage;
+        g_lpSamplerWake = CreateEventA(nullptr, FALSE, FALSE, nullptr);
+        HANDLE t = g_lpSamplerWake != nullptr
+            ? CreateThread(nullptr, 0, LpSamplerProc, nullptr, 0, nullptr) : nullptr;
+        if (t == nullptr) {
+            Log("LoadPhases: sampler thread could not start");
+            if (g_lpSamplerWake != nullptr) {
+                CloseHandle(g_lpSamplerWake);
+                g_lpSamplerWake = nullptr;
+            }
+            return;
+        }
+        SetThreadPriority(t, THREAD_PRIORITY_TIME_CRITICAL);
+        CloseHandle(t);
+    }
+    const DWORD self = GetCurrentThreadId();
+    if (g_lpSampleTargetId != self) {
+        if (g_lpSampleTarget != nullptr) {
+            CloseHandle(g_lpSampleTarget);
+        }
+        g_lpSampleTarget = OpenThread(
+            THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION, FALSE, self);
+        g_lpSampleTargetId = g_lpSampleTarget != nullptr ? self : 0;
+    }
+    g_lpSampleCount = 0;
+    g_lpSampleCostUs = 0;
+    InterlockedExchange(&g_lpSampling, 1);
+    SetEvent(g_lpSamplerWake);
+}
+
+static void LpSamplerStop() {
+    InterlockedExchange(&g_lpSampling, 0);
+}
+#endif  // LP_SAMPLE_MAIN_THREAD
+
 static void LpArm(unsigned int id) {
     // A re-arm while a window is still open is the same load: the perceived-load
     // tracker ends and restarts on short state-activation transitions inside one
@@ -790,10 +966,16 @@ static void LpPushAt(LARGE_INTEGER qpc, unsigned char kind, int a = 0, int b = 0
                      int c = 0, float f1 = 0.0f, float f2 = 0.0f) {
     if (kind == LP_FINALIZE_ENTER && g_lp.phase < 1) {
         g_lp.phase = 1;
+#if LP_SAMPLE_MAIN_THREAD
+        LpSamplerStart();
+#endif
     } else if (kind == LP_STATE12_EXIT && g_lp.phase < 2) {
         g_lp.phase = 2;
     } else if (kind == LP_AREA_LOADED) {
         g_lp.phase = 3;
+#if LP_SAMPLE_MAIN_THREAD
+        LpSamplerStop();
+#endif
     }
     if (g_lp.eventCount < LP_EVENT_MAX) {
         LpEvent& e = g_lp.events[g_lp.eventCount];
@@ -1008,6 +1190,27 @@ static void EmitLoadPhases(unsigned int id, LARGE_INTEGER t0, long long vlFirstL
             id, i, QpcRelUs(t0, tk.qpc), (unsigned)tk.phase, tk.durUs, tk.heldBefore);
         Log(buf);
     }
+#if LP_SAMPLE_MAIN_THREAD
+    // One line per main-thread sample: EIP, then return addresses innermost
+    // first.  The sampler stopped at the area-loaded ack (or stops here).
+    LpSamplerStop();
+    const LONG sampleN = g_lpSampleCount;
+    Log("LoadPhaseSamples: id=" + std::to_string(id) +
+        " n=" + std::to_string(sampleN) +
+        " suspended_us=" + std::to_string(g_lpSampleCostUs));
+    for (LONG i = 0; i < sampleN; ++i) {
+        const LpSample& sm = g_lpSamples[i];
+        char buf[256];
+        int len = sprintf_s(buf, sizeof(buf),
+            "LoadPhaseSample: id=%u n=%ld at_us=%lld phase=%u eip=%08x m=%c st=",
+            id, i, QpcRelUs(t0, sm.qpc), (unsigned)sm.phase, sm.eip, sm.method);
+        for (unsigned int f = 0; f < sm.depth && len > 0 && len < (int)sizeof(buf) - 10; ++f) {
+            len += sprintf_s(buf + len, sizeof(buf) - len, f ? ",%x" : "%x", sm.frames[f]);
+        }
+        Log(buf);
+    }
+    g_lpSampleCount = 0;
+#endif
     g_lp.active = false;
 }
 
@@ -2846,11 +3049,22 @@ uint32_t __fastcall Hook_ModuleChunkLoadCore(int param1, void* edx) {
     g_archiveLoadInProgress = true;
 #endif
 
+#if ENABLE_LOAD_PHASES_LOG
+    const bool lpModChunk = outermostModuleChunkLoad && LpActive();
+    if (lpModChunk) {
+        LpPush(LP_MODCHUNK_ENTER);
+    }
+#endif
     uint32_t result;
     {
         ScopedModuleChunkDepth depthScope;
         result = g_originalModuleChunkLoadCore(param1);
     }
+#if ENABLE_LOAD_PHASES_LOG
+    if (lpModChunk) {
+        LpPush(LP_MODCHUNK_EXIT, (int)result);
+    }
+#endif
 
 #if KEEP_ARCHIVE_OPEN_DURING_LOAD
     g_archiveLoadInProgress = wasArchiveLoadInProgress;

@@ -72,6 +72,17 @@
 // 101PER stream 1.90 s -> 0.56 s (scenario G, stream_force.md).  Set to 0 for
 // a no-force control run; ProfilerRunStart logs it as stream_force=.
 #define FORCE_AREA_STREAM_DURING_LOAD 1
+// GPU mipmap generation for texture uploads.  Texture_UploadToGL (0x00433cd0)
+// builds mipmaps with GL_GENERATE_MIPMAP + glTexImage2D only when
+// GL_CanUseHardwareMipmapGen (0x00484a60, its only caller) returns 1; otherwise
+// it calls gluBuild2DMipmaps and builds every level on the CPU.  The check
+// fails whenever GL_ARB_fragment_program is present (GL_DetectExtensions sets
+// the disqualifying bit 0x100000 for it), i.e. on every modern driver: ~149 ms
+// of each 101PER reload's stream window (stream_force.md).  1 = return 1 when
+// GL_SGIS_generate_mipmap is present.  Logged as hw_mipmaps=.
+#ifndef FORCE_HW_MIPMAP_GEN
+#define FORCE_HW_MIPMAP_GEN 1
+#endif
 #define ARCHIVE_CACHE_MAX_BYTES (256u * 1024u * 1024u)
 
 #if AB_SCENARIO == AB_SCENARIO_C
@@ -669,14 +680,19 @@ static void ArmVisualLoad(unsigned int id, LARGE_INTEGER now);
 #if FORCE_AREA_STREAM_DURING_LOAD && !ENABLE_LOAD_PHASES_LOG
 #error FORCE_AREA_STREAM_DURING_LOAD is applied inside the LoadPhases tick hook (0x00537590)
 #endif
+#if FORCE_HW_MIPMAP_GEN && !ENABLE_LOAD_PHASES_LOG
+#error FORCE_HW_MIPMAP_GEN is applied by a LoadPhases hook (0x00484a60)
+#endif
 #define LP_EVENT_MAX 128
 #define LP_TICK_MAX 64
 #define LP_MSG_MAX 64
 #define LP_GUI_FADE_MAX 16
-// Main-thread stack sampler for the finalize..area-loaded window (log only).
+// Main-thread stack sampler for the arm..area-loaded window (log only).
 // With the stream forced, the remaining ~470 ms of it has stretches with no
 // server tick at all: GameMain is stuck inside one client tick while nested
-// LoadingScreenUpdateFrame(runLoadingScreenWork=0) calls keep presenting.  A
+// LoadingScreenUpdateFrame(runLoadingScreenWork=0) calls keep presenting.  It
+// starts when the window arms (click / state activation), so the load before
+// finalize (work_us) is covered too.  A
 // side thread suspends the main thread ~every 1 ms, records EIP plus return
 // addresses, and resumes it; nothing is allocated while it is suspended.
 // Addresses are resolved offline in Ghidra (lp_samples.py groups them).
@@ -765,6 +781,14 @@ struct LoadPhaseTracker {
     unsigned int tickListCount;
     unsigned int msgListCount;
     LpTickCounts ticks[LP_PHASES];
+    // Texture_UploadToGL calls and gluBuild2DMipmaps calls (the CPU mip path),
+    // bucketed by phase like ticks: 0 = before finalize (work), 1..3 as above.
+    unsigned int texUploads[LP_PHASES];
+    long long texUploadUs[LP_PHASES];
+    unsigned int gluMips[LP_PHASES];
+    long long gluMipUs[LP_PHASES];
+    unsigned int mipChecks;   // GL_CanUseHardwareMipmapGen calls
+    unsigned int mipForced;   // ... of which FORCE_HW_MIPMAP_GEN turned 0 into 1
     unsigned int msgs[LP_PHASES];
     long long msgBytes[LP_PHASES];
     long long msgUs[LP_PHASES];
@@ -784,7 +808,7 @@ static bool LpActive() {
 
 #if LP_SAMPLE_MAIN_THREAD
 #pragma comment(lib, "winmm.lib")
-#define LP_SAMPLE_MAX 2048
+#define LP_SAMPLE_MAX 4096
 #define LP_SAMPLE_FRAMES 16
 struct LpSample {
     LARGE_INTEGER qpc;
@@ -894,6 +918,11 @@ static DWORD WINAPI LpSamplerProc(LPVOID) {
         WaitForSingleObject(g_lpSamplerWake, INFINITE);
         timeBeginPeriod(1);
         while (InterlockedCompareExchange(&g_lpSampling, 0, 0) != 0) {
+            if (g_lpSampleCount >= LP_SAMPLE_MAX) {
+                // Full (a window that never reached the ack): stop suspending.
+                InterlockedExchange(&g_lpSampling, 0);
+                break;
+            }
             LpTakeSample();
             Sleep(1);
         }
@@ -901,7 +930,8 @@ static DWORD WINAPI LpSamplerProc(LPVOID) {
     }
 }
 
-// Called on the main thread at finalize entry.
+// Called on the main thread when a window arms (and again, as a no-op, at
+// finalize entry).
 static void LpSamplerStart() {
     if (InterlockedCompareExchange(&g_lpSampling, 0, 0) != 0) {
         return;
@@ -960,6 +990,9 @@ static void LpArm(unsigned int id) {
     g_lp.active = true;
     g_lp.ownerThreadId = GetCurrentThreadId();
     g_lp.id = id;
+#if LP_SAMPLE_MAIN_THREAD
+    LpSamplerStart();
+#endif
 }
 
 static void LpPushAt(LARGE_INTEGER qpc, unsigned char kind, int a = 0, int b = 0,
@@ -1141,6 +1174,21 @@ static void EmitLoadPhases(unsigned int id, LARGE_INTEGER t0, long long vlFirstL
     kv("vl_first_gameplay_us", vlFirstGameplayUs);
     kv("vl_total_us", vlTotalUs);
     kv("events", g_lp.eventCount);
+    Log(line);
+
+    // Texture uploads per phase (work = before finalize).  gluBuild2DMipmaps
+    // time is inside the upload time, not in addition to it.
+    static const char* const kPhaseNames[LP_PHASES] = {"work", "hs", "stream", "post"};
+    line = "LoadPhaseTextures: id=" + std::to_string(id);
+    kv("mip_checks", g_lp.mipChecks);
+    kv("mip_forced", g_lp.mipForced);
+    for (int ph = 0; ph < LP_PHASES; ++ph) {
+        const std::string n = kPhaseNames[ph];
+        kv(("uploads_" + n).c_str(), g_lp.texUploads[ph]);
+        kv(("upload_us_" + n).c_str(), g_lp.texUploadUs[ph]);
+        kv(("glu_mips_" + n).c_str(), g_lp.gluMips[ph]);
+        kv(("glu_us_" + n).c_str(), g_lp.gluMipUs[ph]);
+    }
     Log(line);
 
     line = "LoadPhaseMarks: id=" + std::to_string(id);
@@ -2054,6 +2102,74 @@ LP_SCRIPT_FADE_HOOK(Hook_LpFadeOut, g_lpOrigFadeOut, LP_SCRIPT_FADE_OUT)
 LP_SCRIPT_FADE_HOOK(Hook_LpFadeIn, g_lpOrigFadeIn, LP_SCRIPT_FADE_IN)
 LP_SCRIPT_FADE_HOOK(Hook_LpFadeUntil, g_lpOrigFadeUntil, LP_SCRIPT_FADE_UNTIL)
 
+// GL_CanUseHardwareMipmapGen 0x00484a60: cdecl, no args, plain RET; result
+// cached in 0x009f6134.  Its only caller is Texture_UploadToGL.  With
+// FORCE_HW_MIPMAP_GEN, a 0 becomes 1 when the GL_SGIS_generate_mipmap bit
+// (mask at 0x009f60b8) is set in the detected-extension word (0x00a32df8).
+typedef int (__cdecl* LpMipCheck_t)();
+static LpMipCheck_t g_lpOrigMipCheck = nullptr;
+
+int __cdecl Hook_LpMipCheck() {
+    int r = g_lpOrigMipCheck();
+    bool forced = false;
+#if FORCE_HW_MIPMAP_GEN
+    if (r == 0) {
+        const DWORD haveExt = *(const DWORD*)0x00a32df8;
+        const DWORD sgisBit = *(const DWORD*)0x009f60b8;
+        if (sgisBit != 0 && (haveExt & sgisBit) == sgisBit) {
+            r = 1;
+            forced = true;
+        }
+    }
+#endif
+    if (LpActive()) {
+        ++g_lp.mipChecks;
+        g_lp.mipForced += forced ? 1 : 0;
+    }
+    return r;
+}
+
+// Texture_UploadToGL 0x00433cd0: cdecl (tex, isSubImage, index), plain RET;
+// the one direct caller (0x004267d6) pushes 3 and does ADD ESP,0xc.
+typedef void (__cdecl* LpTexUpload_t)(void* tex, uint32_t isSub, uint32_t index);
+static LpTexUpload_t g_lpOrigTexUpload = nullptr;
+
+void __cdecl Hook_LpTexUpload(void* tex, uint32_t isSub, uint32_t index) {
+    if (!LpActive()) {
+        g_lpOrigTexUpload(tex, isSub, index);
+        return;
+    }
+    LARGE_INTEGER t0 = {}, t1 = {};
+    QueryPerformanceCounter(&t0);
+    g_lpOrigTexUpload(tex, isSub, index);
+    QueryPerformanceCounter(&t1);
+    const int ph = g_lp.phase;
+    ++g_lp.texUploads[ph];
+    g_lp.texUploadUs[ph] += QpcElapsedUs(t0, t1);
+}
+
+// glu32!gluBuild2DMipmaps (stdcall, 7 args): the CPU mip path's cost.
+typedef int (WINAPI* LpGluBuild2DMipmaps_t)(
+    uint32_t target, int components, int width, int height, uint32_t format,
+    uint32_t type, const void* data);
+static LpGluBuild2DMipmaps_t g_lpOrigGluMips = nullptr;
+
+int WINAPI Hook_LpGluBuild2DMipmaps(
+    uint32_t target, int components, int width, int height, uint32_t format,
+    uint32_t type, const void* data) {
+    if (!LpActive()) {
+        return g_lpOrigGluMips(target, components, width, height, format, type, data);
+    }
+    LARGE_INTEGER t0 = {}, t1 = {};
+    QueryPerformanceCounter(&t0);
+    const int r = g_lpOrigGluMips(target, components, width, height, format, type, data);
+    QueryPerformanceCounter(&t1);
+    const int ph = g_lp.phase;
+    ++g_lp.gluMips[ph];
+    g_lp.gluMipUs[ph] += QpcElapsedUs(t0, t1);
+    return r;
+}
+
 // Both are defined with the other hook-install helpers further down.
 static bool InstallCheckedHook(DWORD address, LPVOID detour, LPVOID* original, const char* name);
 static bool MatchesExecutableBytes(DWORD address, const BYTE* expected, size_t length);
@@ -2087,6 +2203,8 @@ static void InstallLoadPhaseHooks() {
     static const BYTE sigFadeIn[] = {0x55,0x8b,0xec,0x83,0xec,0x3c};
     static const BYTE sigFadeUntil[] = {0x55,0x8b,0xec,0x83,0xec,0x0c};
     static const BYTE sigGetWrite[] = {0x55,0x8b,0xec,0x83,0xec,0x0c};
+    static const BYTE sigMipCheck[] = {0x55,0x8b,0xec,0x83,0xec,0x0c,0x83,0x3d,0x34,0x61,0x9f,0x00};
+    static const BYTE sigTexUpload[] = {0x55,0x8b,0xec,0x83,0xec,0x7c,0x8b,0x45,0x08};
 #define LP_INSTALL(ADDR, SIG, DETOUR, ORIG, NAME) \
     InstallLoadPhaseHook(ADDR, SIG, sizeof(SIG), (LPVOID)&DETOUR, (LPVOID*)&ORIG, NAME)
     LP_INSTALL(0x0055a650, sigFinalize, Hook_LpFinalize, g_lpOrigFinalize, "LP_ModuleLoad_FinalizeAndQueueReady");
@@ -2102,7 +2220,17 @@ static void InstallLoadPhaseHooks() {
     LP_INSTALL(0x00696b00, sigFadeOut, Hook_LpFadeOut, g_lpOrigFadeOut, "LP_SetGlobalFadeOut");
     LP_INSTALL(0x006969e0, sigFadeIn, Hook_LpFadeIn, g_lpOrigFadeIn, "LP_SetGlobalFadeIn");
     LP_INSTALL(0x00699db0, sigFadeUntil, Hook_LpFadeUntil, g_lpOrigFadeUntil, "LP_SetFadeUntilScript");
+    LP_INSTALL(0x00484a60, sigMipCheck, Hook_LpMipCheck, g_lpOrigMipCheck, "LP_GL_CanUseHardwareMipmapGen");
+    LP_INSTALL(0x00433cd0, sigTexUpload, Hook_LpTexUpload, g_lpOrigTexUpload, "LP_Texture_UploadToGL");
 #undef LP_INSTALL
+    HMODULE glu = GetModuleHandleA("glu32.dll");
+    FARPROC gluMips = glu != nullptr ? GetProcAddress(glu, "gluBuild2DMipmaps") : nullptr;
+    if (gluMips != nullptr) {
+        InstallCheckedHook((DWORD)gluMips, (LPVOID)&Hook_LpGluBuild2DMipmaps,
+            (LPVOID*)&g_lpOrigGluMips, "LP_gluBuild2DMipmaps");
+    } else {
+        Log("LoadPhases: glu32!gluBuild2DMipmaps not found, hook skipped");
+    }
 }
 #endif  // ENABLE_LOAD_PHASES_LOG
 
@@ -5274,7 +5402,8 @@ static void InstallPerformanceHooks() {
         " defer_ingame_tabs=" + std::to_string(DEFER_INGAME_TAB_CONSTRUCTION) +
         " clamp_long_fades=" + std::to_string(CLAMP_LONG_FADES) +
         " load_phases_log=" + std::to_string(ENABLE_LOAD_PHASES_LOG) +
-        " stream_force=" + std::to_string(FORCE_AREA_STREAM_DURING_LOAD));
+        " stream_force=" + std::to_string(FORCE_AREA_STREAM_DURING_LOAD) +
+        " hw_mipmaps=" + std::to_string(FORCE_HW_MIPMAP_GEN));
 #if SKIP_PRELOAD_INITIAL_ASSETS_WRAPPER
     InstallCheckedHook(0x0073f050, (LPVOID)&Hook_PreloadInitialAssetsWrapper,
         (LPVOID*)&g_originalPreloadInitialAssetsWrapperPtr, "PreloadInitialAssetsWrapper");

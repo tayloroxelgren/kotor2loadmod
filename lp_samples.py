@@ -8,17 +8,39 @@ With it, addresses are labelled with their containing function and each window
 also gets a per-function inclusive ranking.
 
 For each load in the latest run, splits the main-thread samples into windows:
+  work        window armed (click) .. finalize enter
   handshake   finalize enter .. server running (state12_exit)
   gap1        server running .. first stream message
   gap2        first .. second stream message
   rest        second message .. area-loaded ack
 and prints, per window, the return addresses present in the most samples
 (inclusive: each address counts once per sample).  Resolve them in Ghidra.
+--summary prints only a per-window category table in ms (samples x the mean
+sample interval), averaged over the run's loads -- the A/B view.
 """
 import bisect
 import re
 import sys
-from collections import Counter
+from collections import Counter, defaultdict
+
+# Categories by a return address on the stack, first match wins.  Addresses
+# are return sites in swkotor2.exe (Steam build), resolved in Ghidra 2026-09-25.
+CATEGORIES = [
+    ("cpu_mipmaps", lambda st: 0x4340BC in st),       # Texture_UploadToGL -> gluBuild2DMipmaps
+    ("texture_upload", lambda st: 0x4267DB in st),    # FUN_004265e0 -> Texture_UploadToGL
+    ("texture_queue", lambda st: 0x42785E in st),     # TexturePoolCleanupAndRefresh, other
+    ("present_wait", lambda st: st[:1] == [0x409FCF]),  # LoadingScreenUpdateFrame SwapBuffers
+    ("other", lambda st: True),
+]
+WINDOWS = ["work", "handshake", "gap1", "gap2", "rest"]
+
+
+def category(st):
+    for name, test in CATEGORIES:
+        if test(st):
+            return name
+    return "other"
+
 
 DEFAULT_LOG = r"D:\SteamLibrary\steamapps\common\Knights of the Old Republic II\kotor2_log.txt"
 
@@ -50,6 +72,9 @@ def main():
         only_id = args[i + 1]
         del args[i:i + 2]
     starts, names = [], []
+    summary = "--summary" in args
+    if summary:
+        args.remove("--summary")
     if "--funcs" in args:
         i = args.index("--funcs")
         starts, names = load_funcs(args[i + 1])
@@ -82,6 +107,9 @@ def main():
             loads.setdefault(d["id"], {"events": {}, "msgs": [], "samples": []})["samples"].append(
                 (int(d["at_us"]), int(d["eip"], 16), d.get("m", "?"), st))
 
+    table = defaultdict(float)  # (window, category) -> ms summed over loads
+    wlen = defaultdict(float)   # window -> ms summed over loads
+    nloads = 0
     for lid, ld in loads.items():
         if only_id and lid != only_id:
             continue
@@ -94,7 +122,19 @@ def main():
         m0 = stream[0] if stream else run
         m1 = stream[1] if len(stream) > 1 else m0
         ack = ev.get("area_loaded", 10 ** 12)
-        windows = [("handshake", fin, run), ("gap1", run, m0), ("gap2", m0, m1), ("rest", m1, ack)]
+        windows = [("work", -10 ** 12, fin), ("handshake", fin, run), ("gap1", run, m0),
+                   ("gap2", m0, m1), ("rest", m1, ack)]
+        ts = [s[0] for s in ld["samples"]]
+        interval = (ts[-1] - ts[0]) / max(len(ts) - 1, 1)  # us per sample
+        nloads += 1
+        for name, a, b in windows:
+            lo = max(a, ts[0])
+            wlen[name] += max(min(b, ack) - lo, 0) / 1000
+            for s in ld["samples"]:
+                if a <= s[0] < b:
+                    table[(name, category(s[3]))] += interval / 1000
+        if summary:
+            continue
         mc = (ev.get("modchunk_enter"), ev.get("modchunk_exit"))
         print(f"=== load id={lid} samples={len(ld['samples'])} finalize={fin} running={run} "
               f"msg0={m0} msg1={m1} ack={ack} modchunk={mc[0]}..{mc[1]}")
@@ -125,6 +165,14 @@ def main():
                 print("    inclusive by function:")
                 for f, n in fincl.most_common(top):
                     print(f"      {n:4d} {100 * n / len(sm):5.1f}%  {f}")
+
+    if nloads:
+        cats = [c for c, _ in CATEGORIES]
+        print(f"=== mean ms per load over {nloads} load(s)")
+        print(f"{'window':<10}{'length':>8}" + "".join(f"{c:>16}" for c in cats))
+        for w in WINDOWS:
+            print(f"{w:<10}{wlen[w] / nloads:8.0f}" +
+                  "".join(f"{table[(w, c)] / nloads:16.0f}" for c in cats))
 
 
 if __name__ == "__main__":

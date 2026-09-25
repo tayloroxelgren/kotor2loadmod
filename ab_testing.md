@@ -12,6 +12,7 @@ Set `AB_SCENARIO` at the top of `dinput8.cpp`:
 #define AB_SCENARIO AB_SCENARIO_A   // baseline: all optimization toggles off
 #define AB_SCENARIO AB_SCENARIO_B   // throttle + archive cache + debug-GUI skip
 #define AB_SCENARIO AB_SCENARIO_C   // baseline + long-fade clamp (1.0s -> 1ms)
+#define AB_SCENARIO AB_SCENARIO_G   // baseline + forced area streaming during load (stream_force.md)
 ```
 
 Then build (from any shell):

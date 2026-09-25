@@ -28,7 +28,9 @@
 #define AB_SCENARIO_A 0
 #define AB_SCENARIO_B 1
 #define AB_SCENARIO_C 2
-#define AB_SCENARIO AB_SCENARIO_C
+// D/E/F are taken on the queue-pump / area-prefetch / ui-timer branches.
+#define AB_SCENARIO_G 6
+#define AB_SCENARIO AB_SCENARIO_G
 
 // Round-1 B scenario: present throttle + archive byte cache + debug-GUI skip.
 // Deliberately excluded from B (isolate in a later round): GUI controls lookup
@@ -37,6 +39,13 @@
 // experiment vs A).  Load transitions run a 1.0-second fade animation
 // (measured: duration_raw=0x3F800000, once per load); clamping it to 1 ms
 // removes that second of deliberate pacing from every load.
+// G scenario: baseline toggles + forced area streaming (single-variable
+// experiment vs A).  After a load the server streams the client's object data
+// in ~2 KB messages, at most one per 200 ms (Server_UpdateClient_Throttle200ms
+// 0x00537590), and the loading screen stays up until the last one lands: ~9
+// messages, 1.90 s of pure wait on the 101PER reload (load_phases.md).  Passing
+// the engine's own force flag while the player is still streaming sends one
+// message per tick instead.  See stream_force.md.
 #if AB_SCENARIO == AB_SCENARIO_B
 #define ENABLE_GUI_CONTROLS_LOOKUP_CACHE 0
 #define THROTTLE_LOADING_SCREEN_PRESENTS 1
@@ -53,6 +62,15 @@
 #define SKIP_DEBUG_GUI_CONSTRUCTION 0
 #define DEFER_INGAME_TAB_CONSTRUCTION 0
 #define CLAMP_LONG_FADES 1
+#elif AB_SCENARIO == AB_SCENARIO_G
+#define ENABLE_GUI_CONTROLS_LOOKUP_CACHE 0
+#define THROTTLE_LOADING_SCREEN_PRESENTS 0
+#define LOADING_SCREEN_PRESENT_INTERVAL_MS 100
+#define ENABLE_ARCHIVE_RESOURCE_CACHE 0
+#define SKIP_DEBUG_GUI_CONSTRUCTION 0
+#define DEFER_INGAME_TAB_CONSTRUCTION 0
+#define CLAMP_LONG_FADES 0
+#define FORCE_AREA_STREAM_DURING_LOAD 1
 #else
 #define ENABLE_GUI_CONTROLS_LOOKUP_CACHE 0
 #define THROTTLE_LOADING_SCREEN_PRESENTS 0
@@ -62,9 +80,14 @@
 #define DEFER_INGAME_TAB_CONSTRUCTION 0
 #define CLAMP_LONG_FADES 0
 #endif
+#ifndef FORCE_AREA_STREAM_DURING_LOAD
+#define FORCE_AREA_STREAM_DURING_LOAD 0
+#endif
 #define ARCHIVE_CACHE_MAX_BYTES (256u * 1024u * 1024u)
 
-#if AB_SCENARIO == AB_SCENARIO_C
+#if AB_SCENARIO == AB_SCENARIO_G
+static const char* const kScenarioName = "g_streamforce";
+#elif AB_SCENARIO == AB_SCENARIO_C
 static const char* const kScenarioName = "c_fadeclamp";
 #elif AB_SCENARIO == AB_SCENARIO_B
 static const char* const kScenarioName = "b_optimized";
@@ -656,6 +679,9 @@ static void ArmVisualLoad(unsigned int id, LARGE_INTEGER now);
 // the whole session.  Outside a window it is a flag test and a forward; inside
 // one it only bumps counters and fills fixed arrays -- no per-call Log().
 #define ENABLE_LOAD_PHASES_LOG 1
+#if FORCE_AREA_STREAM_DURING_LOAD && !ENABLE_LOAD_PHASES_LOG
+#error FORCE_AREA_STREAM_DURING_LOAD is applied inside the LoadPhases tick hook (0x00537590)
+#endif
 #define LP_EVENT_MAX 128
 #define LP_TICK_MAX 64
 #define LP_MSG_MAX 64
@@ -1696,9 +1722,26 @@ static bool LpReadThrottleStamp(void* player, unsigned long long& out) {
     }
 }
 
+// FORCE_AREA_STREAM_DURING_LOAD: player+0x24 is the player's area-load state.
+// It is 1 while the area streams and Server_HandleAreaMsg (0x00660600) flips it
+// to 2 on the client's area-loaded ack (P(4,3)), so forcing only while it is 1
+// covers exactly the throttle-paced stream and leaves gameplay at 200 ms.  The
+// force flag skips only the 200 ms time compare (0x00537689); the function's
+// own "is this player updatable yet" checks (+0x7c, creature+0x350) still run
+// first.  The engine passes force=1 itself from FUN_0089fbd0.
+static uint32_t StreamForceFlag(uint32_t player, uint32_t force) {
+#if FORCE_AREA_STREAM_DURING_LOAD
+    if (force != 1 && player != 0 && *(unsigned char*)(player + 0x24) == 1) {
+        return 1;
+    }
+#endif
+    return force;
+}
+
 uint32_t __fastcall Hook_LpUpdateClient(
     void* thisPtr, void* edx, uint32_t player, uint32_t force, uint32_t timeLo,
     uint32_t timeHi) {
+    force = StreamForceFlag(player, force);
     // Fast path for the ~whole session: no window, or the load has not reached
     // finalize yet.
     if (!g_lp.active || g_lp.phase == 0 || !LpActive()) {
@@ -5029,7 +5072,8 @@ static void InstallPerformanceHooks() {
         " skip_debug_gui=" + std::to_string(SKIP_DEBUG_GUI_CONSTRUCTION) +
         " defer_ingame_tabs=" + std::to_string(DEFER_INGAME_TAB_CONSTRUCTION) +
         " clamp_long_fades=" + std::to_string(CLAMP_LONG_FADES) +
-        " load_phases_log=" + std::to_string(ENABLE_LOAD_PHASES_LOG));
+        " load_phases_log=" + std::to_string(ENABLE_LOAD_PHASES_LOG) +
+        " stream_force=" + std::to_string(FORCE_AREA_STREAM_DURING_LOAD));
 #if SKIP_PRELOAD_INITIAL_ASSETS_WRAPPER
     InstallCheckedHook(0x0073f050, (LPVOID)&Hook_PreloadInitialAssetsWrapper,
         (LPVOID*)&g_originalPreloadInitialAssetsWrapperPtr, "PreloadInitialAssetsWrapper");

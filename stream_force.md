@@ -94,7 +94,7 @@ Not yet checked: a larger level.
 A second run the same night (run_id 115398065698256) repeated it: stream 0.548-0.583 s,
 10 forced ticks per load.
 
-## Remaining gaps: where the main thread is (instrumented 2026-09-25, not run yet)
+## Remaining gaps: where the main thread is (instrumented and run 2026-09-25)
 
 `GameMain` (0x00408120) does, per frame: `CClientExoApp_MainLoopTick` (client), then
 `loadingscreenwrapper` → `loadingscreen` (0x00533830, the server tick, which calls
@@ -125,3 +125,54 @@ Prediction:
   Samples sit under the client's object-update handler, most likely loading models or
   textures for the objects in that message, not in `ModuleChunkLoadCore`.
 - Sampling cost: `suspended_us` a few ms per load. The stream should stay about 0.55 s.
+
+### Result (run_id 77636713844027, four 101PER loads)
+
+The sampler was stable: 292-313 samples per load (one per ~1.93 ms), 11-13 ms of total
+suspension per load, stream 0.56-0.60 s, the same as without it. `modchunk_enter`/`exit`
+land 10 ms after the server starts running and end ~270 ms later, 1-2 ms before the first
+message. So gap 1 **is** `ModuleChunkLoadCore`, as predicted. But inside it, most of the
+time is texture uploads, not module loading.
+
+Mean per load, in ms (`lp_samples.py --funcs`, categories by stack content):
+
+| | gap 1 (286) | gap 2 (193) | rest (95) |
+|---|---|---|---|
+| `gluBuild2DMipmaps` (CPU mipmaps) | **149** | 0 | 0 |
+| other pending-texture uploads | 34 | 58 | 10 |
+| waiting in `SwapBuffers` (loading-screen redraw) | 10 | 31 | 13 |
+| rest of `ModuleChunkLoadCore` | 27 | - | - |
+| area scene build (`FUN_007a2fb0`: mainscene, grass, anim loops) | - | 33 | - |
+| other (file reads, malloc, packet handling) | 67 | 70 | 72 |
+
+How the texture work gets there: `LoadingScreenUpdateFrame` → `FrameMetricsAndMemoryUpdate`
+→ `FUN_00427f30` → `TexturePoolCleanupAndRefresh` (0x00427810). That last function is not
+idle cleanup: it drains the pending-texture queue (`DAT_00a1bc30`) and uploads each entry
+through `FUN_004260e0` → … → `Texture_UploadToGL` (0x00433cd0, renamed). So every load-bar
+redraw pays for the textures queued since the previous one. In gap 1 the redraws come from
+`ModuleChunkLoadCore` via `AppState_SetLoadBarValue`; in gap 2 from the scene build.
+
+**The CPU mipmap path is a stale capability check.** For uncompressed mipmapped textures,
+`Texture_UploadToGL` calls `GL_CanUseHardwareMipmapGen` (0x00484a60, renamed; its only
+caller). If that returns 1 it sets `GL_GENERATE_MIPMAP` and calls `glTexImage2D`, so the
+driver builds the mips. If it returns 0 it calls `gluBuild2DMipmaps`, which builds every
+level on the CPU. The check needs `GL_SGIS_generate_mipmap` (bit 0x80000) and **not** bit
+0x100000. `GL_DetectExtensions` (0x004317d0) sets 0x100000 for `GL_ATI_text_fragment_shader`
+and also for `GL_ARB_fragment_program`, which every modern driver exposes. So current
+hardware always gets the CPU path, most likely an old ATI-era workaround.
+
+Gap 2's texture uploads are a different path (no `gluBuild2DMipmaps` samples there), and the
+~54 ms per load in `SwapBuffers` is loading-screen redraws waiting on present.
+
+### Candidates, largest first
+
+1. **Force `GL_CanUseHardwareMipmapGen` to return 1** when `GL_SGIS_generate_mipmap` is present.
+   It has one caller, and the engine already has the GPU path. Expected: most of the ~149 ms
+   in gap 1. The load before finalize (`work_us`, ~0.84 s, not sampled) probably uploads
+   textures the same way, so the total saving may be larger. Risk: mip quality differs
+   slightly (driver box filter vs GLU's), and `gluBuild2DMipmaps` also rescales
+   non-power-of-two images, which `glTexImage2D` now uploads as-is (fine on modern GPUs).
+2. **Throttle loading-screen presents** during the stream (the existing
+   `THROTTLE_LOADING_SCREEN_PRESENTS` toggle from scenario B). It keeps the redraw work but
+   skips clear/swap: up to ~54 ms per load.
+3. Extend the sampler window to click → ack to see how much of `work_us` is the same texture path.

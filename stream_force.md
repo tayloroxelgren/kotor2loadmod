@@ -85,5 +85,5 @@ that difference comes from the other branch's build or the machine state, not th
 experiment. **The total `VisualLoad` numbers (4.43-4.46 s per reload) need a scenario A run
 from this branch before they can be compared.** Only the stream phase is compared above.
 
-Not yet checked: game state after reload (objects, party, first area transition) and a
-larger level.
+Game state after the reloads: nothing looked off in play (checked by hand, 2026-09-25).
+Not yet checked: a larger level.

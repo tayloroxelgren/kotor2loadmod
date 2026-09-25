@@ -12,8 +12,10 @@ Set `AB_SCENARIO` at the top of `dinput8.cpp`:
 #define AB_SCENARIO AB_SCENARIO_A   // baseline: all optimization toggles off
 #define AB_SCENARIO AB_SCENARIO_B   // throttle + archive cache + debug-GUI skip
 #define AB_SCENARIO AB_SCENARIO_C   // baseline + long-fade clamp (1.0s -> 1ms)
-#define AB_SCENARIO AB_SCENARIO_G   // baseline + forced area streaming during load (stream_force.md)
 ```
+
+Forced area streaming (`FORCE_AREA_STREAM_DURING_LOAD`, `stream_force.md`) is on in every
+scenario since 2026-09-25. For a no-force control, set it to 0; the log shows `stream_force=`.
 
 Then build (from any shell):
 

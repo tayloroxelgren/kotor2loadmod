@@ -1,5 +1,8 @@
 # Forced area streaming during load (scenario G)
 
+**Merged to `main` as the default in every scenario on 2026-09-25.** Scenario G no longer
+exists; set `FORCE_AREA_STREAM_DURING_LOAD 0` for a control run.
+
 Single-variable experiment against scenario A: every other optimization toggle is off.
 `FORCE_AREA_STREAM_DURING_LOAD` is 1 only in `AB_SCENARIO_G`, and `ProfilerRunStart`
 logs `scenario=g_streamforce ... stream_force=1`.

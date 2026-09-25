@@ -28,9 +28,9 @@
 #define AB_SCENARIO_A 0
 #define AB_SCENARIO_B 1
 #define AB_SCENARIO_C 2
-// D/E/F are taken on the queue-pump / area-prefetch / ui-timer branches.
-#define AB_SCENARIO_G 6
-#define AB_SCENARIO AB_SCENARIO_G
+// D/E/F are taken on the queue-pump / area-prefetch / ui-timer branches; G was
+// the forced-streaming experiment, now on in every scenario (below).
+#define AB_SCENARIO AB_SCENARIO_A
 
 // Round-1 B scenario: present throttle + archive byte cache + debug-GUI skip.
 // Deliberately excluded from B (isolate in a later round): GUI controls lookup
@@ -39,13 +39,6 @@
 // experiment vs A).  Load transitions run a 1.0-second fade animation
 // (measured: duration_raw=0x3F800000, once per load); clamping it to 1 ms
 // removes that second of deliberate pacing from every load.
-// G scenario: baseline toggles + forced area streaming (single-variable
-// experiment vs A).  After a load the server streams the client's object data
-// in ~2 KB messages, at most one per 200 ms (Server_UpdateClient_Throttle200ms
-// 0x00537590), and the loading screen stays up until the last one lands: ~9
-// messages, 1.90 s of pure wait on the 101PER reload (load_phases.md).  Passing
-// the engine's own force flag while the player is still streaming sends one
-// message per tick instead.  See stream_force.md.
 #if AB_SCENARIO == AB_SCENARIO_B
 #define ENABLE_GUI_CONTROLS_LOOKUP_CACHE 0
 #define THROTTLE_LOADING_SCREEN_PRESENTS 1
@@ -62,15 +55,6 @@
 #define SKIP_DEBUG_GUI_CONSTRUCTION 0
 #define DEFER_INGAME_TAB_CONSTRUCTION 0
 #define CLAMP_LONG_FADES 1
-#elif AB_SCENARIO == AB_SCENARIO_G
-#define ENABLE_GUI_CONTROLS_LOOKUP_CACHE 0
-#define THROTTLE_LOADING_SCREEN_PRESENTS 0
-#define LOADING_SCREEN_PRESENT_INTERVAL_MS 100
-#define ENABLE_ARCHIVE_RESOURCE_CACHE 0
-#define SKIP_DEBUG_GUI_CONSTRUCTION 0
-#define DEFER_INGAME_TAB_CONSTRUCTION 0
-#define CLAMP_LONG_FADES 0
-#define FORCE_AREA_STREAM_DURING_LOAD 1
 #else
 #define ENABLE_GUI_CONTROLS_LOOKUP_CACHE 0
 #define THROTTLE_LOADING_SCREEN_PRESENTS 0
@@ -80,14 +64,17 @@
 #define DEFER_INGAME_TAB_CONSTRUCTION 0
 #define CLAMP_LONG_FADES 0
 #endif
-#ifndef FORCE_AREA_STREAM_DURING_LOAD
-#define FORCE_AREA_STREAM_DURING_LOAD 0
-#endif
+// Forced area streaming: on in every scenario, so experiments build on it.
+// After a load the server streams the client's object data in ~2 KB messages,
+// at most one per 200 ms (Server_UpdateClient_Throttle200ms 0x00537590), and
+// the loading screen stays up until the last one lands.  Passing the engine's
+// own force flag while the player is still streaming sends one per tick:
+// 101PER stream 1.90 s -> 0.56 s (scenario G, stream_force.md).  Set to 0 for
+// a no-force control run; ProfilerRunStart logs it as stream_force=.
+#define FORCE_AREA_STREAM_DURING_LOAD 1
 #define ARCHIVE_CACHE_MAX_BYTES (256u * 1024u * 1024u)
 
-#if AB_SCENARIO == AB_SCENARIO_G
-static const char* const kScenarioName = "g_streamforce";
-#elif AB_SCENARIO == AB_SCENARIO_C
+#if AB_SCENARIO == AB_SCENARIO_C
 static const char* const kScenarioName = "c_fadeclamp";
 #elif AB_SCENARIO == AB_SCENARIO_B
 static const char* const kScenarioName = "b_optimized";

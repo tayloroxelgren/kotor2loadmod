@@ -1,8 +1,8 @@
 @echo off
 setlocal
 REM Usage: build.bat [-release | -nohooks]
-REM   (no argument)  development build: logging and diagnostics on
-REM   -release       shipping build: /DLOGGING_ENABLED=0, no log file, no diagnostics
+REM   (no argument)  development build: logs hook installs to kotor2_log.txt
+REM   -release       shipping build: /DLOGGING_ENABLED=0, same hooks, no log file
 REM   -nohooks       pass-through proxy: no hooks, no enhancements, no logging
 REM Run it from any shell; it sets up the 32-bit MSVC environment itself if needed.
 cd /d "%~dp0"
@@ -44,8 +44,6 @@ if /i not "%VSCMD_ARG_TGT_ARCH%"=="x86" (
     )
 )
 
-echo ---- A/B scenario in dinput8.cpp ----
-findstr /C:"#define AB_SCENARIO_A" /C:"#define AB_SCENARIO_B" /C:"#define AB_SCENARIO AB" dinput8.cpp
 echo Building KOTOR 2 Proxy (32-bit, %MODE%)...
 
 REM Compile MinHook in 32-bit
